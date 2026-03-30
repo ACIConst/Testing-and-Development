@@ -33,9 +33,8 @@ export default function LandingPage() {
         <div style={{ width: 40, height: 2, background: C.red, margin: "18px auto 0" }} />
       </div>
       <div style={{ display: "flex", gap: 18, flexWrap: "wrap", justifyContent: "center", alignItems: "stretch" }}>
-        <ModeCard title="Employee Kiosk" desc="Browse items & place orders with your PIN" accent={C.red} onClick={() => nav("/kiosk")} />
-        <ModeCard title="Order Board" desc="Live fulfillment view for incoming orders" accent="#1e40af" onClick={() => nav("/board")} />
-        <ModeCard title="Admin Panel" desc="Manage menu, delivery & order history" accent="#b45309" onClick={() => nav("/admin")} />
+        <ModeCard title="Employee Kiosk" desc="Browse items & place orders" accent={C.red} onClick={() => nav("/kiosk")} />
+        <ModeCard title="Admin Panel" desc="Manage menu, orders & delivery" accent="#b45309" onClick={() => nav("/admin")} />
       </div>
     </div>
   );
