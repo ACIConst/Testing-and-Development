@@ -1,18 +1,17 @@
+// Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
 
+// Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyDLRN_BkCY3OUUvd7gmlDhEzUGxHSkMK_w",
-  authDomain: "champs-butcher-f43ee.firebaseapp.com",
-  projectId: "champs-butcher-f43ee",
-  storageBucket: "champs-butcher-f43ee.firebasestorage.app",
-  messagingSenderId: "360512551221",
-  appId: "1:360512551221:web:83edb7582af4611c43347c"
+  apiKey: "AIzaSyAquZM2hCtkUQEuwK4im17nmarFm_NOEGw",
+  authDomain: "testing-and-development-f696f.firebaseapp.com",
+  projectId: "testing-and-development-f696f",
+  storageBucket: "testing-and-development-f696f.firebasestorage.app",
+  messagingSenderId: "377942988060",
+  appId: "1:377942988060:web:8532c4cbd03125e77996d9"
 };
 
-export const app = initializeApp(firebaseConfig);
-export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager(),
-  }),
-});
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
