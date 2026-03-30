@@ -29,17 +29,20 @@ function SignOutButton() {
 
 export default function App() {
   return (
-    <OperatorGate>
-      <Suspense fallback={<div style={{ minHeight: "100vh", background: "#111" }} />}>
-        <SignOutButton />
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/kiosk" element={<KioskView />} />
-          <Route path="/board" element={<BoardView />} />
-          <Route path="/admin" element={<AdminView />} />
-        </Routes>
-      </Suspense>
-    </OperatorGate>
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#111" }} />}>
+      <Routes>
+        <Route path="/kiosk" element={<KioskView />} />
+        <Route path="/*" element={
+          <OperatorGate>
+            <SignOutButton />
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/board" element={<BoardView />} />
+              <Route path="/admin" element={<AdminView />} />
+            </Routes>
+          </OperatorGate>
+        } />
+      </Routes>
+    </Suspense>
   );
 }
-
