@@ -98,10 +98,10 @@ export const SEED_MENU = [
   { name:"Breakfast Sausage", description:"House-made maple & sage links, 8-pack",                   price:8.49,  category:"Sausage", inStock:false, image:"https://images.unsplash.com/photo-1551248429-40975aa4de74?w=500&q=80" },
 ];
 
-export const SEED_USERS = [
+export const SEED_USERS = import.meta.env.DEV ? [
   { firstName:"John", lastName:"Smith", phone:"3165551234", email:"john@example.com", passwordHash:"a1b2c3d4_champs_bk", role:"Employee", deliveryLocation:"North Office" },
   { firstName:"Maria", lastName:"Garcia", phone:"3165555678", email:"maria@example.com", passwordHash:"e5f6g7h8_champs_bk", role:"Employee", deliveryLocation:"Sand Plant" },
-];
+] : [];
 
 export const SEED_CATEGORIES = [
   { name:"Steaks",  sortOrder:1 },

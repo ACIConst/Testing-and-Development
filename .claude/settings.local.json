@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(env|json|js|ts\\)$\")",
+      "Bash(ls -la /c/Users/franka/Testing-and-Development/.env*)",
+      "Bash(xargs grep:*)",
+      "Bash(npx vite:*)"
+    ]
+  }
+}

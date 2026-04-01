@@ -32,32 +32,36 @@ export function hashPassword(raw) {
   return h.toString(16).padStart(8, "0") + "_champs_bk";
 }
 
-// ─── Seeding helpers ──────────────────────────────────────────────────────────
-async function runSeedOnce(key, seedFn) {
-  const configRef = doc(db, "kioskConfig", key);
-  try {
-    const snap = await getDocs(query(collection(db, "kioskConfig"), where("__name__", "==", key)));
-    if (!snap.empty) return;
-    await seedFn();
-    await setDoc(configRef, { seededAt: new Date().toISOString() });
-  } catch (e) {
-    console.warn("Seed check failed:", key, e);
-  }
-}
-
-async function seedAdminsIfEmpty() {
-  const snap = await getDocs(collection(db, "kioskAdmins"));
-  if (!snap.empty) return;
-  await addDoc(collection(db, "kioskAdmins"), {
-    name: "Frank",
-    username: "frank",
-    passwordHash: hashPassword("champs2024"),
-    role: "Super Admin",
-    createdAt: serverTimestamp(),
-  });
-}
-
+// ─── Seeding helpers (dev only) ───────────────────────────────────────────────
 export function runSeeds() {
+  if (!import.meta.env.DEV) return;
+
+  async function runSeedOnce(key, seedFn) {
+    const configRef = doc(db, "kioskConfig", key);
+    try {
+      const snap = await getDocs(query(collection(db, "kioskConfig"), where("__name__", "==", key)));
+      if (!snap.empty) return;
+      await seedFn();
+      await setDoc(configRef, { seededAt: new Date().toISOString() });
+    } catch (e) {
+      console.warn("Seed check failed:", key, e);
+    }
+  }
+
+  async function seedAdminsIfEmpty() {
+    const snap = await getDocs(collection(db, "kioskAdmins"));
+    if (!snap.empty) return;
+    const defaultPw = import.meta.env.VITE_DEFAULT_ADMIN_PW;
+    if (!defaultPw) { console.warn("Skipping admin seed: set VITE_DEFAULT_ADMIN_PW in .env"); return; }
+    await addDoc(collection(db, "kioskAdmins"), {
+      name: "Dev Admin",
+      username: "admin",
+      passwordHash: hashPassword(defaultPw),
+      role: "Super Admin",
+      createdAt: serverTimestamp(),
+    });
+  }
+
   runSeedOnce("menu", () => { const b = writeBatch(db); SEED_MENU.forEach(i => { b.set(doc(collection(db, "kioskMenu")), i); }); return b.commit(); });
   runSeedOnce("users", () => { const b = writeBatch(db); SEED_USERS.forEach(i => { b.set(doc(collection(db, "kioskUsers")), i); }); return b.commit(); });
   runSeedOnce("categories", () => { const b = writeBatch(db); SEED_CATEGORIES.forEach(i => { b.set(doc(collection(db, "kioskCategories")), i); }); return b.commit(); });
