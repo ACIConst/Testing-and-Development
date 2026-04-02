@@ -153,8 +153,8 @@ async function importSelectedProducts(req, res) {
 }
 
 /**
- * Refresh stock levels for all QB-linked menu items.
- * Only updates stock and inStock — doesn't change name, price, or other fields.
+ * Refresh all QB-managed fields for linked menu items.
+ * Updates stock, price, name, description, and SKU from QuickBooks.
  */
 async function refreshStock(req, res) {
   try {
@@ -166,10 +166,7 @@ async function refreshStock(req, res) {
       return;
     }
 
-    // Collect all QB item IDs we need to look up
     const qbItemIds = menuSnap.docs.map((doc) => doc.data().qbItemId);
-
-    // Query QB for current stock levels (batch in chunks of 30 for query length limits)
     const chunks = [];
     for (let i = 0; i < qbItemIds.length; i += 30) {
       chunks.push(qbItemIds.slice(i, i + 30));
@@ -178,14 +175,13 @@ async function refreshStock(req, res) {
     const qbItems = {};
     for (const chunk of chunks) {
       const idList = chunk.map((id) => `'${id}'`).join(", ");
-      const result = await qbQuery(`SELECT Id, QtyOnHand, UnitPrice FROM Item WHERE Id IN (${idList})`);
+      const result = await qbQuery(`SELECT Id, Name, Description, QtyOnHand, UnitPrice, Sku FROM Item WHERE Id IN (${idList})`);
       const items = result.QueryResponse?.Item || [];
       for (const item of items) {
         qbItems[item.Id] = item;
       }
     }
 
-    // Update each menu item's stock
     let updated = 0;
     for (const doc of menuSnap.docs) {
       const menuItem = doc.data();
@@ -194,13 +190,27 @@ async function refreshStock(req, res) {
 
       const newStock = qbItem.QtyOnHand ?? null;
       const newInStock = newStock === null ? true : newStock > 0;
+      const newPrice = qbItem.UnitPrice || 0;
+      const newName = qbItem.Name || menuItem.name;
+      const newDesc = qbItem.Description || "";
+      const newSku = qbItem.Sku || "";
 
-      // Only update if stock actually changed
-      if (menuItem.stock !== newStock || menuItem.inStock !== newInStock) {
+      // Update if ANY QB-managed field changed
+      if (
+        menuItem.stock !== newStock ||
+        menuItem.inStock !== newInStock ||
+        menuItem.price !== newPrice ||
+        menuItem.name !== newName ||
+        menuItem.description !== newDesc ||
+        menuItem.sku !== newSku
+      ) {
         await doc.ref.update({
           stock: newStock,
           inStock: newInStock,
-          price: qbItem.UnitPrice || menuItem.price,
+          price: newPrice,
+          name: newName,
+          description: newDesc,
+          sku: newSku,
           qbSyncedAt: Date.now(),
           updatedAt: new Date(),
         });
