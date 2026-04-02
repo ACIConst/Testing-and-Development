@@ -759,7 +759,7 @@ function OrderHistory({ orders, users, menu, dbOps, showToast }) {const{T:C,TF:F
 function SettingsPanel({ showToast, adminAccounts, dbOps, currentAdmin, isSuperAdmin }) {
   const { T: C, TF: F, theme, setTheme, fontId, setFontId, logoUrl, setLogoUrl } = useAdminTheme();
   const [stab, setStab] = useState("appearance");
-  const tabs=[{id:"appearance",label:"Appearance"},{id:"staff",label:"Staff & Access"},{id:"store",label:"Store Info"},{id:"notifications",label:"Notifications"}];
+  const tabs=[{id:"appearance",label:"Appearance"},{id:"staff",label:"Staff & Access"},{id:"store",label:"Store Info"},{id:"notifications",label:"Notifications"},{id:"quickbooks",label:"QuickBooks"}];
   const cardSt={background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"20px 22px",marginBottom:18};
   const secTitle={fontSize:12,letterSpacing:2,textTransform:"uppercase",color:C.muted,marginBottom:14,fontWeight:700};
   return(
@@ -771,6 +771,7 @@ function SettingsPanel({ showToast, adminAccounts, dbOps, currentAdmin, isSuperA
       {stab==="staff"&&<SettingsStaff C={C} F={F} adminAccounts={adminAccounts} dbOps={dbOps} currentAdmin={currentAdmin} isSuperAdmin={isSuperAdmin} showToast={showToast} cardSt={cardSt} secTitle={secTitle}/>}
       {stab==="store"&&<SettingsStoreInfo C={C} F={F} showToast={showToast} cardSt={cardSt} secTitle={secTitle}/>}
       {stab==="notifications"&&<SettingsNotifications C={C} F={F} cardSt={cardSt} secTitle={secTitle}/>}
+      {stab==="quickbooks"&&<SettingsQuickBooks C={C} F={F} showToast={showToast} cardSt={cardSt} secTitle={secTitle} isSuperAdmin={isSuperAdmin}/>}
     </div>
   );
 }
@@ -886,6 +887,69 @@ function SettingsNotifications({C,F,cardSt,secTitle}){
           </div>
           <button onClick={testChime} style={{background:C.surface,border:"1px solid "+C.borderMid,color:C.cream,borderRadius:10,padding:"10px 18px",cursor:"pointer",fontFamily:F.body,fontSize:13,fontWeight:600}}>{"\uD83D\uDD14"} Test Chime</button>
         </>}
+      </div>
+    </div>
+  );
+}
+
+function SettingsQuickBooks({C,F,showToast,cardSt,secTitle,isSuperAdmin}){
+  const [status,setStatus]=useState(null);const [loading,setLoading]=useState(true);const [acting,setActing]=useState(false);
+  const PROJECT_ID="testing-and-development-f696f";
+  const FUNCTIONS_BASE=`https://us-central1-${PROJECT_ID}.cloudfunctions.net`;
+
+  useEffect(()=>{
+    getDoc(doc(db,"kioskConfig","qbConnection")).then(snap=>{
+      if(snap.exists())setStatus(snap.data());
+    }).catch(()=>{}).finally(()=>setLoading(false));
+  },[]);
+
+  // Check URL params for OAuth callback result
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search);
+    const qb=params.get("qb");
+    if(qb==="connected"){showToast("QuickBooks connected successfully");window.history.replaceState({},"","/admin");}
+    if(qb==="error"){showToast("QuickBooks connection failed","error");window.history.replaceState({},"","/admin");}
+  },[]);
+
+  async function handleConnect(){setActing(true);window.location.href=`${FUNCTIONS_BASE}/qbAuth`;}
+  async function handleDisconnect(){
+    setActing(true);
+    try{
+      const res=await fetch(`${FUNCTIONS_BASE}/qbDisconnect`,{method:"POST"});
+      if(!res.ok)throw new Error("Disconnect failed");
+      await setDoc(doc(db,"kioskConfig","qbConnection"),{connected:false,disconnectedAt:Date.now()},{merge:true});
+      setStatus({connected:false});showToast("QuickBooks disconnected");
+    }catch(e){console.error(e);showToast("Failed to disconnect","error");}finally{setActing(false);}
+  }
+
+  if(loading)return<div style={{color:C.muted,padding:20}}>Loading...</div>;
+  const connected=status?.connected===true;
+
+  return(
+    <div style={{maxWidth:560}}>
+      <div style={cardSt}>
+        <div style={secTitle}>QuickBooks Online</div>
+        <div style={{fontSize:12,color:C.muted,marginBottom:20}}>Sync orders and financial data with QuickBooks Online.</div>
+
+        <div style={{display:"flex",alignItems:"center",gap:12,padding:"16px 18px",background:C.surface,border:"1px solid "+C.border,borderRadius:12,marginBottom:16}}>
+          <div style={{width:10,height:10,borderRadius:"50%",background:connected?C.green:C.muted,flexShrink:0}}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:14,color:C.cream,fontWeight:600}}>{connected?"Connected":"Not Connected"}</div>
+            {connected&&status?.connectedAt&&<div style={{fontSize:12,color:C.muted,marginTop:2}}>Since {new Date(status.connectedAt).toLocaleDateString()}</div>}
+            {connected&&status?.realmId&&<div style={{fontSize:11,color:C.muted,marginTop:2,fontFamily:F.mono}}>Company ID: {status.realmId}</div>}
+          </div>
+        </div>
+
+        {!connected?(
+          <button onClick={handleConnect} disabled={acting||!isSuperAdmin} style={{width:"100%",background:"#2CA01C",border:"none",color:"#fff",borderRadius:10,padding:"14px 20px",cursor:isSuperAdmin?"pointer":"not-allowed",fontFamily:F.body,fontSize:14,fontWeight:700,opacity:acting?0.6:1,transition:"opacity .2s"}}>
+            {acting?"Redirecting...":"Connect to QuickBooks"}
+          </button>
+        ):(
+          <button onClick={handleDisconnect} disabled={acting||!isSuperAdmin} style={{width:"100%",background:C.errorBg,border:"1px solid "+C.errorText,color:C.errorText,borderRadius:10,padding:"14px 20px",cursor:isSuperAdmin?"pointer":"not-allowed",fontFamily:F.body,fontSize:14,fontWeight:700,opacity:acting?0.6:1,transition:"opacity .2s"}}>
+            {acting?"Disconnecting...":"Disconnect QuickBooks"}
+          </button>
+        )}
+        {!isSuperAdmin&&<div style={{fontSize:12,color:C.muted,marginTop:10}}>Only Super Admins can manage the QuickBooks connection.</div>}
       </div>
     </div>
   );
