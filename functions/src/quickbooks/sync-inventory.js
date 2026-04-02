@@ -1,4 +1,5 @@
 const { getFirestore } = require("firebase-admin/firestore");
+const { getStorage } = require("firebase-admin/storage");
 const { qbQuery, qbGet } = require("./api");
 
 /**
@@ -33,6 +34,52 @@ async function fetchQBProducts(req, res) {
 }
 
 /**
+ * Fetch the product image from QB's Attachable API and upload to Firebase Storage.
+ * Returns the public download URL, or "" if no image found.
+ */
+async function fetchQBItemImage(qbItemId) {
+  try {
+    // Query for attachables linked to this item
+    const result = await qbQuery(
+      `SELECT * FROM Attachable WHERE AttachableRef.EntityRef.Type = 'Item' AND AttachableRef.EntityRef.value = '${qbItemId}'`
+    );
+
+    const attachables = result.QueryResponse?.Attachable || [];
+    if (attachables.length === 0) return "";
+
+    // Find the first image attachment
+    const imageAttachment = attachables.find((a) =>
+      a.ContentType && a.ContentType.startsWith("image/")
+    );
+    if (!imageAttachment) return "";
+
+    const downloadUri = imageAttachment.TempDownloadUri;
+    if (!downloadUri) return "";
+
+    // Download the image
+    const imageRes = await fetch(downloadUri);
+    if (!imageRes.ok) return "";
+    const imageBuffer = Buffer.from(await imageRes.arrayBuffer());
+
+    // Upload to Firebase Storage
+    const bucket = getStorage().bucket();
+    const ext = imageAttachment.ContentType === "image/png" ? "png" : "jpg";
+    const filePath = `menu-images/qb-${qbItemId}.${ext}`;
+    const file = bucket.file(filePath);
+
+    await file.save(imageBuffer, {
+      metadata: { contentType: imageAttachment.ContentType },
+    });
+    await file.makePublic();
+
+    return `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+  } catch (err) {
+    console.warn(`Failed to fetch image for QB item ${qbItemId}:`, err.message);
+    return "";
+  }
+}
+
+/**
  * Import admin-selected QB items into kioskMenu.
  * Expects POST body: { items: [{ qbItemId, name, price, description, sku, stock, category }] }
  */
@@ -54,6 +101,12 @@ async function importSelectedProducts(req, res) {
       // Check if this QB item is already linked to a kiosk menu item
       const existing = await menuRef.where("qbItemId", "==", item.qbItemId).limit(1).get();
 
+      // Try to fetch product image from QB
+      let imageUrl = "";
+      if (existing.empty || !existing.docs[0].data().image) {
+        imageUrl = await fetchQBItemImage(item.qbItemId);
+      }
+
       const data = {
         qbItemId: item.qbItemId,
         name: item.name,
@@ -72,7 +125,7 @@ async function importSelectedProducts(req, res) {
         // Create new menu item
         await menuRef.add({
           ...data,
-          image: "",
+          image: imageUrl,
           barcodeImage: "",
           isBundle: false,
           bundleItems: [],
@@ -82,7 +135,12 @@ async function importSelectedProducts(req, res) {
         created++;
       } else {
         // Update existing linked item (preserve kiosk-only fields like image, menuOrder)
-        await existing.docs[0].ref.update(data);
+        const updateData = { ...data };
+        // Only set image if we got one from QB and existing doesn't have one
+        if (imageUrl && !existing.docs[0].data().image) {
+          updateData.image = imageUrl;
+        }
+        await existing.docs[0].ref.update(updateData);
         updated++;
       }
     }
