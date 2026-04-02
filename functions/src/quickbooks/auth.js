@@ -8,6 +8,7 @@ const QB_CLIENT_ID = defineString("QB_CLIENT_ID");
 const QB_CLIENT_SECRET = defineString("QB_CLIENT_SECRET");
 const QB_REDIRECT_URI = defineString("QB_REDIRECT_URI");
 const QB_ENVIRONMENT = defineString("QB_ENVIRONMENT"); // "sandbox" or "production"
+const QB_APP_URL = defineString("QB_APP_URL"); // Your frontend URL (e.g., https://testing-and-development-f696f.web.app)
 
 function createOAuthClient() {
   return new OAuthClient({
@@ -46,12 +47,15 @@ async function callback(req, res) {
     const authResponse = await oauthClient.createToken(req.url);
     const tokens = authResponse.getJson();
 
+    // realmId comes from the URL query string, not the token response
+    const realmId = new URL(req.url, `https://${req.headers.host}`).searchParams.get("realmId") || tokens.realmId || "";
+
     // Store tokens encrypted in Firestore
     const db = getFirestore();
     await db.collection("qbTokens").doc("current").set({
       accessToken: encrypt(tokens.access_token),
       refreshToken: encrypt(tokens.refresh_token),
-      realmId: tokens.realmId, // QuickBooks company ID — not sensitive, needed for API calls
+      realmId: realmId,
       tokenType: tokens.token_type,
       expiresAt: Date.now() + tokens.expires_in * 1000,
       refreshExpiresAt: Date.now() + tokens.x_refresh_token_expires_in * 1000,
@@ -62,15 +66,17 @@ async function callback(req, res) {
     // Write public connection status (no tokens!) so admin UI can show status
     await db.collection("kioskConfig").doc("qbConnection").set({
       connected: true,
-      realmId: tokens.realmId,
+      realmId: realmId,
       connectedAt: Date.now(),
     });
 
     // Redirect back to admin settings with success indicator
-    res.redirect("/admin?qb=connected");
+    const appUrl = QB_APP_URL.value();
+    res.redirect(`${appUrl}/admin?qb=connected`);
   } catch (err) {
     console.error("QuickBooks OAuth callback error:", err);
-    res.redirect("/admin?qb=error");
+    const appUrl = QB_APP_URL.value();
+    res.redirect(`${appUrl}/admin?qb=error`);
   }
 }
 

@@ -894,8 +894,8 @@ function SettingsNotifications({C,F,cardSt,secTitle}){
 
 function SettingsQuickBooks({C,F,showToast,cardSt,secTitle,isSuperAdmin}){
   const [status,setStatus]=useState(null);const [loading,setLoading]=useState(true);const [acting,setActing]=useState(false);
-  const PROJECT_ID="testing-and-development-f696f";
-  const FUNCTIONS_BASE=`https://us-central1-${PROJECT_ID}.cloudfunctions.net`;
+  const QB_AUTH_URL="https://qbauth-osbc5z7m5a-uc.a.run.app";
+  const QB_DISCONNECT_URL="https://qbdisconnect-osbc5z7m5a-uc.a.run.app";
 
   useEffect(()=>{
     getDoc(doc(db,"kioskConfig","qbConnection")).then(snap=>{
@@ -911,11 +911,11 @@ function SettingsQuickBooks({C,F,showToast,cardSt,secTitle,isSuperAdmin}){
     if(qb==="error"){showToast("QuickBooks connection failed","error");window.history.replaceState({},"","/admin");}
   },[]);
 
-  async function handleConnect(){setActing(true);window.location.href=`${FUNCTIONS_BASE}/qbAuth`;}
+  async function handleConnect(){setActing(true);window.location.href=QB_AUTH_URL;}
   async function handleDisconnect(){
     setActing(true);
     try{
-      const res=await fetch(`${FUNCTIONS_BASE}/qbDisconnect`,{method:"POST"});
+      const res=await fetch(QB_DISCONNECT_URL,{method:"POST"});
       if(!res.ok)throw new Error("Disconnect failed");
       await setDoc(doc(db,"kioskConfig","qbConnection"),{connected:false,disconnectedAt:Date.now()},{merge:true});
       setStatus({connected:false});showToast("QuickBooks disconnected");
