@@ -193,7 +193,7 @@ function AdminApp({ menu, users, orders, adminAccounts, categories, catNames, db
           {tab==="delivery"   &&<DeliveryPanel orders={orders} users={users} dbOps={dbOps} showToast={showToast}/>}
           {tab==="inventory"&&isSuperAdmin&&<InventoryHistoryPanel adjustments={adjustments}/>}
           {tab==="audit"&&isSuperAdmin&&<AuditLogPanel auditLogs={auditLogs}/>}
-          {tab==="settings"&&<SettingsPanel showToast={showToast} adminAccounts={adminAccounts} dbOps={dbOps} currentAdmin={loggedInAdmin} isSuperAdmin={isSuperAdmin}/>}
+          {tab==="settings"&&<SettingsPanel showToast={showToast} adminAccounts={adminAccounts} dbOps={dbOps} currentAdmin={loggedInAdmin} isSuperAdmin={isSuperAdmin} categories={categories}/>}
         </div>
       </main>
       {toast&&<div style={{position:"fixed",bottom:isMobile?14:26,right:isMobile?14:26,left:isMobile?14:"auto",background:toast.type==="success"?C.green:toast.type==="order"?"#1e3a5f":C.errorBg,color:toast.type==="success"?C.greenText:toast.type==="order"?"#93c5fd":C.errorText,border:"1px solid "+(toast.type==="success"?C.greenText:toast.type==="order"?"#3b82f6":C.errorText),borderRadius:12,padding:"12px 20px",fontSize:14,fontWeight:600,animation:"fadeUp .3s ease",zIndex:999,boxShadow:"0 8px 24px rgba(0,0,0,.5)",display:"flex",alignItems:"center",gap:8}}>{toast.type==="success"?"\u2713":toast.type==="order"?"\uD83D\uDCE6":"\u2715"} {toast.msg}</div>}
@@ -756,7 +756,7 @@ function OrderHistory({ orders, users, menu, dbOps, showToast }) {const{T:C,TF:F
 // ═══════════════════════════════════════════════════════════════════════════════
 // Settings Panel — tabbed: Appearance, Staff & Access, Store Info, Notifications
 // ═══════════════════════════════════════════════════════════════════════════════
-function SettingsPanel({ showToast, adminAccounts, dbOps, currentAdmin, isSuperAdmin }) {
+function SettingsPanel({ showToast, adminAccounts, dbOps, currentAdmin, isSuperAdmin, categories }) {
   const { T: C, TF: F, theme, setTheme, fontId, setFontId, logoUrl, setLogoUrl } = useAdminTheme();
   const [stab, setStab] = useState("appearance");
   const tabs=[{id:"appearance",label:"Appearance"},{id:"staff",label:"Staff & Access"},{id:"store",label:"Store Info"},{id:"notifications",label:"Notifications"},{id:"quickbooks",label:"QuickBooks"}];
@@ -771,7 +771,7 @@ function SettingsPanel({ showToast, adminAccounts, dbOps, currentAdmin, isSuperA
       {stab==="staff"&&<SettingsStaff C={C} F={F} adminAccounts={adminAccounts} dbOps={dbOps} currentAdmin={currentAdmin} isSuperAdmin={isSuperAdmin} showToast={showToast} cardSt={cardSt} secTitle={secTitle}/>}
       {stab==="store"&&<SettingsStoreInfo C={C} F={F} showToast={showToast} cardSt={cardSt} secTitle={secTitle}/>}
       {stab==="notifications"&&<SettingsNotifications C={C} F={F} cardSt={cardSt} secTitle={secTitle}/>}
-      {stab==="quickbooks"&&<SettingsQuickBooks C={C} F={F} showToast={showToast} cardSt={cardSt} secTitle={secTitle} isSuperAdmin={isSuperAdmin}/>}
+      {stab==="quickbooks"&&<SettingsQuickBooks C={C} F={F} showToast={showToast} cardSt={cardSt} secTitle={secTitle} isSuperAdmin={isSuperAdmin} categories={categories}/>}
     </div>
   );
 }
@@ -892,10 +892,18 @@ function SettingsNotifications({C,F,cardSt,secTitle}){
   );
 }
 
-function SettingsQuickBooks({C,F,showToast,cardSt,secTitle,isSuperAdmin}){
+function SettingsQuickBooks({C,F,showToast,cardSt,secTitle,isSuperAdmin,categories}){
   const [status,setStatus]=useState(null);const [loading,setLoading]=useState(true);const [acting,setActing]=useState(false);
+  const [companyName,setCompanyName]=useState(null);
+  const [showProductPicker,setShowProductPicker]=useState(false);
+  const [qbProducts,setQbProducts]=useState([]);const [selectedProducts,setSelectedProducts]=useState({});const [importing,setImporting]=useState(false);
+  const [refreshing,setRefreshing]=useState(false);
   const QB_AUTH_URL="https://qbauth-osbc5z7m5a-uc.a.run.app";
   const QB_DISCONNECT_URL="https://qbdisconnect-osbc5z7m5a-uc.a.run.app";
+  const QB_TEST_URL="https://qbtestconnection-osbc5z7m5a-uc.a.run.app";
+  const QB_SYNC_URL="https://qbsyncproducts-osbc5z7m5a-uc.a.run.app";
+  const QB_IMPORT_URL="https://qbimportselected-osbc5z7m5a-uc.a.run.app";
+  const QB_REFRESH_URL="https://qbrefreshstock-osbc5z7m5a-uc.a.run.app";
 
   useEffect(()=>{
     getDoc(doc(db,"kioskConfig","qbConnection")).then(snap=>{
@@ -903,7 +911,6 @@ function SettingsQuickBooks({C,F,showToast,cardSt,secTitle,isSuperAdmin}){
     }).catch(()=>{}).finally(()=>setLoading(false));
   },[]);
 
-  // Check URL params for OAuth callback result
   useEffect(()=>{
     const params=new URLSearchParams(window.location.search);
     const qb=params.get("qb");
@@ -918,39 +925,124 @@ function SettingsQuickBooks({C,F,showToast,cardSt,secTitle,isSuperAdmin}){
       const res=await fetch(QB_DISCONNECT_URL,{method:"POST"});
       if(!res.ok)throw new Error("Disconnect failed");
       await setDoc(doc(db,"kioskConfig","qbConnection"),{connected:false,disconnectedAt:Date.now()},{merge:true});
-      setStatus({connected:false});showToast("QuickBooks disconnected");
+      setStatus({connected:false});setCompanyName(null);showToast("QuickBooks disconnected");
     }catch(e){console.error(e);showToast("Failed to disconnect","error");}finally{setActing(false);}
+  }
+
+  async function handleTestConnection(){
+    setActing(true);
+    try{
+      const res=await fetch(QB_TEST_URL);
+      const data=await res.json();
+      if(data.success){setCompanyName(data.companyName);showToast("Connected to "+data.companyName);}
+      else throw new Error(data.error);
+    }catch(e){console.error(e);showToast("Connection test failed: "+e.message,"error");}finally{setActing(false);}
+  }
+
+  async function handleSyncProducts(){
+    setActing(true);
+    try{
+      const res=await fetch(QB_SYNC_URL);
+      const data=await res.json();
+      if(data.products){setQbProducts(data.products);setShowProductPicker(true);showToast(`Found ${data.count} products in QuickBooks`);}
+      else throw new Error(data.error);
+    }catch(e){console.error(e);showToast("Failed to fetch products: "+e.message,"error");}finally{setActing(false);}
+  }
+
+  async function handleImportSelected(){
+    const items=Object.values(selectedProducts).filter(p=>p.selected);
+    if(items.length===0){showToast("No products selected","error");return;}
+    setImporting(true);
+    try{
+      const res=await fetch(QB_IMPORT_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(p=>({qbItemId:p.qbItemId,name:p.name,price:p.price,description:p.description,sku:p.sku,stock:p.stock,category:p.category||"Uncategorized"}))})});
+      const data=await res.json();
+      if(data.success){showToast(`Imported ${data.created} new, updated ${data.updated} existing`);setShowProductPicker(false);setSelectedProducts({});}
+      else throw new Error(data.error);
+    }catch(e){console.error(e);showToast("Import failed: "+e.message,"error");}finally{setImporting(false);}
+  }
+
+  async function handleRefreshStock(){
+    setRefreshing(true);
+    try{
+      const res=await fetch(QB_REFRESH_URL);
+      const data=await res.json();
+      if(data.success)showToast(`Stock refreshed: ${data.updated} of ${data.total} items updated`);
+      else throw new Error(data.error);
+    }catch(e){console.error(e);showToast("Stock refresh failed: "+e.message,"error");}finally{setRefreshing(false);}
+  }
+
+  function toggleProduct(p){
+    setSelectedProducts(prev=>{
+      const existing=prev[p.qbItemId]||{...p,selected:false,category:"Uncategorized"};
+      return{...prev,[p.qbItemId]:{...existing,selected:!existing.selected}};
+    });
+  }
+  function setCategoryFor(qbItemId,cat){
+    setSelectedProducts(prev=>({...prev,[qbItemId]:{...prev[qbItemId],category:cat}}));
   }
 
   if(loading)return<div style={{color:C.muted,padding:20}}>Loading...</div>;
   const connected=status?.connected===true;
+  const btnSt={background:C.surface,border:"1px solid "+C.borderMid,color:C.cream,borderRadius:10,padding:"12px 18px",cursor:"pointer",fontFamily:F.body,fontSize:13,fontWeight:600,transition:"opacity .2s",width:"100%",textAlign:"center"};
 
   return(
-    <div style={{maxWidth:560}}>
+    <div style={{maxWidth:640}}>
       <div style={cardSt}>
-        <div style={secTitle}>QuickBooks Online</div>
-        <div style={{fontSize:12,color:C.muted,marginBottom:20}}>Sync orders and financial data with QuickBooks Online.</div>
-
+        <div style={secTitle}>Connection</div>
         <div style={{display:"flex",alignItems:"center",gap:12,padding:"16px 18px",background:C.surface,border:"1px solid "+C.border,borderRadius:12,marginBottom:16}}>
           <div style={{width:10,height:10,borderRadius:"50%",background:connected?C.green:C.muted,flexShrink:0}}/>
           <div style={{flex:1}}>
-            <div style={{fontSize:14,color:C.cream,fontWeight:600}}>{connected?"Connected":"Not Connected"}</div>
+            <div style={{fontSize:14,color:C.cream,fontWeight:600}}>{connected?"Connected"+(companyName?" to "+companyName:""):"Not Connected"}</div>
             {connected&&status?.connectedAt&&<div style={{fontSize:12,color:C.muted,marginTop:2}}>Since {new Date(status.connectedAt).toLocaleDateString()}</div>}
-            {connected&&status?.realmId&&<div style={{fontSize:11,color:C.muted,marginTop:2,fontFamily:F.mono}}>Company ID: {status.realmId}</div>}
           </div>
         </div>
-
         {!connected?(
-          <button onClick={handleConnect} disabled={acting||!isSuperAdmin} style={{width:"100%",background:"#2CA01C",border:"none",color:"#fff",borderRadius:10,padding:"14px 20px",cursor:isSuperAdmin?"pointer":"not-allowed",fontFamily:F.body,fontSize:14,fontWeight:700,opacity:acting?0.6:1,transition:"opacity .2s"}}>
-            {acting?"Redirecting...":"Connect to QuickBooks"}
-          </button>
+          <button onClick={handleConnect} disabled={acting||!isSuperAdmin} style={{...btnSt,background:"#2CA01C",border:"none",color:"#fff",fontWeight:700}}>{acting?"Redirecting...":"Connect to QuickBooks"}</button>
         ):(
-          <button onClick={handleDisconnect} disabled={acting||!isSuperAdmin} style={{width:"100%",background:C.errorBg,border:"1px solid "+C.errorText,color:C.errorText,borderRadius:10,padding:"14px 20px",cursor:isSuperAdmin?"pointer":"not-allowed",fontFamily:F.body,fontSize:14,fontWeight:700,opacity:acting?0.6:1,transition:"opacity .2s"}}>
-            {acting?"Disconnecting...":"Disconnect QuickBooks"}
-          </button>
+          <div style={{display:"flex",gap:10}}>
+            <button onClick={handleTestConnection} disabled={acting} style={btnSt}>{acting?"Testing...":"Test Connection"}</button>
+            <button onClick={handleDisconnect} disabled={acting||!isSuperAdmin} style={{...btnSt,background:C.errorBg,border:"1px solid "+C.errorText,color:C.errorText}}>{acting?"...":"Disconnect"}</button>
+          </div>
         )}
         {!isSuperAdmin&&<div style={{fontSize:12,color:C.muted,marginTop:10}}>Only Super Admins can manage the QuickBooks connection.</div>}
       </div>
+
+      {connected&&<div style={cardSt}>
+        <div style={secTitle}>Inventory Sync</div>
+        <div style={{fontSize:12,color:C.muted,marginBottom:16}}>Import products from QuickBooks and keep stock levels in sync.</div>
+        <div style={{display:"flex",gap:10,marginBottom:12}}>
+          <button onClick={handleSyncProducts} disabled={acting} style={btnSt}>{acting?"Fetching...":"Sync Products from QB"}</button>
+          <button onClick={handleRefreshStock} disabled={refreshing} style={btnSt}>{refreshing?"Refreshing...":"Refresh Stock Levels"}</button>
+        </div>
+        {status?.lastSyncAt&&<div style={{fontSize:11,color:C.muted}}>Last synced: {new Date(status.lastSyncAt).toLocaleString()}</div>}
+      </div>}
+
+      {showProductPicker&&<Modal t={C} title={`QuickBooks Products (${qbProducts.length})`} onClose={()=>setShowProductPicker(false)} wide>
+        <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Select products to show on the kiosk. Assign a category to each.</div>
+        <div style={{maxHeight:400,overflowY:"auto",marginBottom:16}}>
+          {qbProducts.filter(p=>p.active!==false).map(p=>{const sel=selectedProducts[p.qbItemId];const checked=sel?.selected||false;return(
+            <div key={p.qbItemId} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",borderBottom:"1px solid "+C.border,background:checked?C.sidebarActive:"transparent",transition:"background .15s",cursor:"pointer"}} onClick={()=>toggleProduct(p)}>
+              <input type="checkbox" checked={checked} readOnly style={{accentColor:C.red,width:18,height:18,flexShrink:0}}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:14,color:C.cream,fontWeight:600}}>{p.name}</div>
+                <div style={{fontSize:12,color:C.muted}}>{p.sku?p.sku+" \u00B7 ":""}${p.price?.toFixed(2)||"0.00"} \u00B7 Stock: {p.stock??"\u221E"} \u00B7 {p.type}</div>
+              </div>
+              {checked&&<select value={sel?.category||"Uncategorized"} onClick={e=>e.stopPropagation()} onChange={e=>setCategoryFor(p.qbItemId,e.target.value)} style={{...inputSt(true,C),width:140,fontSize:12,padding:"6px 10px"}}>
+                <option>Uncategorized</option>
+                {(categories||[]).map(c=><option key={c.id||c.name} value={c.name}>{c.name}</option>)}
+              </select>}
+            </div>);
+          })}
+          {qbProducts.length===0&&<div style={{padding:30,textAlign:"center",color:C.muted}}>No products found in QuickBooks</div>}
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{fontSize:13,color:C.muted}}>{Object.values(selectedProducts).filter(p=>p.selected).length} selected</div>
+          <div style={{display:"flex",gap:10}}>
+            <Btn t={C} ghost onClick={()=>setShowProductPicker(false)}>Cancel</Btn>
+            <Btn t={C} primary onClick={handleImportSelected} disabled={importing||Object.values(selectedProducts).filter(p=>p.selected).length===0}>{importing?"Importing...":"Import Selected"}</Btn>
+          </div>
+        </div>
+      </Modal>}
     </div>
   );
 }

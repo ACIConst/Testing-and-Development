@@ -188,7 +188,7 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
   function placeOrder(user){
     const userName=(user.firstName||"")+" "+(user.lastName||"");
     const orderNum=Math.floor(Math.random()*9000+1000);
-    const orderData={orderNumber:orderNum,user:userName.trim()||user.name||"Customer",userId:user.id,deliveryLocation:user.deliveryLocation||"",items:cart.map(i=>({id:i.id,name:i.name,price:i.price,quantity:i.quantity,image:i.image||"",sku:i.sku||"",barcode:i.barcode||"",barcodeImage:i.barcodeImage||""})),total:cartTotal,ts:new Date().toISOString()};
+    const orderData={orderNumber:orderNum,user:userName.trim()||user.name||"Customer",userId:user.id,email:user.email||"",deliveryLocation:user.deliveryLocation||"",items:cart.map(i=>({id:i.id,name:i.name,price:i.price,quantity:i.quantity,image:i.image||"",sku:i.sku||"",barcode:i.barcode||"",barcodeImage:i.barcodeImage||"",qbItemId:i.qbItemId||""})),total:cartTotal,ts:new Date().toISOString()};
     setOrderResult({...orderData,displayId:orderNum,email:user.email||""});
     setView("success");
     addOrder(orderData).catch(e=>console.error("Order save failed:",e));
