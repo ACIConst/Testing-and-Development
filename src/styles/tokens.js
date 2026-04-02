@@ -12,12 +12,32 @@ sidebarBg:"#0f0d0b", sidebarActive:"#1c1917",
 focus:"#c0392b",
 };
 
+export const CLight = {
+  bg:"#f5f3f0", surface:"#ffffff", card:"#ffffff",
+  border:"#e0dbd4", borderMid:"#d0c9c0",
+  red:"#d93616",
+  cream:"#1a1714",
+  muted:"#7a7068", mutedLight:"#5a534c",
+  green:"#166534", greenText:"#15803d",
+  errorBg:"#fef2f2", errorText:"#dc2626",
+  amber:"#f59e0b", amberText:"#92400e",
+  sidebarBg:"#ece8e2", sidebarActive:"#ffffff",
+  focus:"#c0392b",
+};
+
 export const F = {
   brand:"'Playfair Display',Georgia,serif",
   display:"'DM Sans',system-ui,sans-serif",
   body:"'DM Sans',system-ui,sans-serif",
   mono:"'JetBrains Mono','Fira Code',monospace",
 };
+
+export const FONT_OPTIONS = [
+  { id:"default", label:"DM Sans (Default)", body:"'DM Sans',system-ui,sans-serif", display:"'DM Sans',system-ui,sans-serif" },
+  { id:"inter",   label:"Inter",             body:"'Inter',system-ui,sans-serif",    display:"'Inter',system-ui,sans-serif" },
+  { id:"roboto",  label:"Roboto",            body:"'Roboto',system-ui,sans-serif",   display:"'Roboto',system-ui,sans-serif" },
+  { id:"mono",    label:"JetBrains Mono",    body:"'JetBrains Mono','Fira Code',monospace", display:"'JetBrains Mono','Fira Code',monospace" },
+];
 
 // ─── Glassmorphism presets ───────────────────────────────────────────────────
 export const GLASS = {
