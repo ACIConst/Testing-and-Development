@@ -11,10 +11,11 @@ service cloud.firestore {
     function isManager() { return role() in ['super_admin', 'manager', 'Super Admin']; }
     function isDelivery() { return role() in ['super_admin', 'manager', 'delivery', 'Super Admin']; }
 
-    // Menu & categories: public read (kiosk needs these), admin write
+    // Menu & categories: public read (kiosk needs these), public stock update, admin full write
     match /kioskMenu/{docId} {
       allow read: if true;
-      allow write: if isManager();
+      allow update: if true;  // Kiosk needs to decrement stock on order placement
+      allow create, delete: if isManager();
     }
     match /kioskCategories/{docId} {
       allow read: if true;
@@ -43,7 +44,11 @@ service cloud.firestore {
       allow write: if isManager();
     }
 
-    // App config: public read (ordering hours, etc.), admin write
+    // App config: public read, orderCounter needs public write for kiosk orders
+    match /kioskConfig/orderCounter {
+      allow read: if true;
+      allow write: if true;
+    }
     match /kioskConfig/{docId} {
       allow read: if true;
       allow write: if isManager();
@@ -55,10 +60,10 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
-    // Audit logs: authenticated read, any authenticated user can append
+    // Audit logs: authenticated read, public create (kiosk orders log without auth)
     match /auditLogs/{docId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn();
+      allow create: if true;
       allow update, delete: if isManager();
     }
 
