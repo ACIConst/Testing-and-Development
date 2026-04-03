@@ -167,7 +167,7 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
   async function handleRegister(){
     if(regLoading)return;
     if(!regFirst.trim()||!regLast.trim()){setRegErr("First and last name required.");return;}
-    if(!regEmail.trim()||!regEmail.includes("@")){setRegErr("Valid email required.");return;}
+    if(!regEmail.trim()||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim())){setRegErr("Valid email required.");return;}
     if(regPass.length<4){setRegErr("Password must be at least 4 characters.");return;}
     if(!regPhone.trim()){setRegErr("Phone number required.");return;}
     const duplicate=users.find(u=>u.email&&u.email.toLowerCase()===regEmail.trim().toLowerCase());
