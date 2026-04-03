@@ -171,11 +171,20 @@ export function createDbOps(menu, categories) {
   const _deleteOrder = (id) => archiveOrder(id);
   const _clearOrders = () => archiveAllActiveOrders();
 
-  // Admin accounts — kept as direct Firestore ops (FNV-1a hash auth)
-  const addAdminAccount = data => addDoc(collection(db, "kioskAdmins"), { ...data, passwordHash: hashPassword(data.password), createdAt: serverTimestamp() });
-  const updateAdminAccount = (id, data) => {
+  // Admin accounts — bcrypt hashing via Cloud Function
+  const HASH_URL = "https://us-central1-testing-and-development-f696f.cloudfunctions.net/kioskHashPassword";
+  const addAdminAccount = async (data) => {
+    const res = await fetch(HASH_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: data.password }) });
+    const { hash } = await res.json();
+    return addDoc(collection(db, "kioskAdmins"), { ...data, passwordHash: hash, createdAt: serverTimestamp() });
+  };
+  const updateAdminAccount = async (id, data) => {
     const updates = { name: data.name, username: data.username, role: data.role };
-    if (data.password && data.password.length >= 6) updates.passwordHash = hashPassword(data.password);
+    if (data.password && data.password.length >= 6) {
+      const res = await fetch(HASH_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: data.password }) });
+      const { hash } = await res.json();
+      updates.passwordHash = hash;
+    }
     return updateDoc(doc(db, "kioskAdmins", id), updates);
   };
   const deleteAdminAccount = id => deleteDoc(doc(db, "kioskAdmins", id));

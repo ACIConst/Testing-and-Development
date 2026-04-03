@@ -42,3 +42,8 @@ exports.qbSyncOrder = onDocumentCreated("kioskOrders/{orderId}", onOrderCreated)
 // Scheduled auto-sync: refresh stock and prices from QB every 15 minutes
 const { autoRefreshStock } = require("./quickbooks/sync-inventory");
 exports.qbAutoSync = onSchedule("every 15 minutes", autoRefreshStock);
+
+// Kiosk auth: server-side password verification and hashing (bcrypt)
+const { verifyPassword, hashPassword } = require("./kiosk-auth");
+exports.kioskVerifyPassword = onRequest(publicOpts, verifyPassword);
+exports.kioskHashPassword = onRequest(publicOpts, hashPassword);

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { C, F, GLASS, GLASS_MODAL, MAX_ITEM_QTY, KIOSK_CART_IDLE_MS, EXIT_HOLD_MS, MAX_PIN_ATTEMPTS, PIN_LOCKOUT_SECS, DELIVERY_LOCATIONS } from "../../styles/tokens";
 import { useIdleTimer } from "../../hooks/useIdleTimer";
-import { useMenu, useUsers, useCategories, createDbOps, hashPassword } from "../../hooks/useFirestore";
+import { useMenu, useUsers, useCategories, createDbOps } from "../../hooks/useFirestore";
 import { Img } from "../../components/Img";
 import { KioskBtn, KQtyBtn, ModeLoadingScreen } from "../../components/ui";
 import { isOrderingOpen, getDeliveryDate, fmtDate } from "../../utils";
@@ -150,21 +150,17 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
     }
   }
 
-  function handleLogin(){
+  async function handleLogin(){
     if(authLoading)return;
     if(!authEmail.trim()||!authPass){setAuthErr("Enter your email and password.");return;}
     setAuthLoading(true);setAuthErr("");
-    const hash=hashPassword(authPass);
-    const user=users.find(u=>u.email&&u.email.toLowerCase()===authEmail.trim().toLowerCase()&&u.passwordHash===hash);
-    if(user){
-      placeOrder(user);
-    }else{
-      const exists=users.find(u=>u.email&&u.email.toLowerCase()===authEmail.trim().toLowerCase());
-      setAuthErr(exists?"Incorrect password.":"No account found. Register below.");
-      setShaking(true);
-      setTimeout(()=>setShaking(false),700);
-    }
-    setAuthLoading(false);
+    try{
+      const res=await fetch("https://us-central1-testing-and-development-f696f.cloudfunctions.net/kioskVerifyPassword",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:authEmail.trim(),password:authPass})});
+      const data=await res.json();
+      if(data.success){placeOrder(data.user);}
+      else{setAuthErr(data.error==="Invalid credentials"?"Invalid email or password.":"Login failed. Try again.");setShaking(true);setTimeout(()=>setShaking(false),700);}
+    }catch(e){console.error("Login error:",e);setAuthErr("Login failed. Try again.");}
+    finally{setAuthLoading(false);}
   }
 
   async function handleRegister(){
@@ -177,7 +173,11 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
     if(duplicate){setRegErr("An account with this email already exists. Please log in.");return;}
     setRegLoading(true);setRegErr("");
     try{
-      const newUser={firstName:regFirst.trim(),lastName:regLast.trim(),email:regEmail.trim().toLowerCase(),phone:regPhone.replace(/\D/g,""),passwordHash:hashPassword(regPass),role:"Customer",deliveryLocation:regLocation};
+      // Hash password server-side with bcrypt
+      const hashRes=await fetch("https://us-central1-testing-and-development-f696f.cloudfunctions.net/kioskHashPassword",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:regPass})});
+      const hashData=await hashRes.json();
+      if(!hashData.hash)throw new Error("Hash failed");
+      const newUser={firstName:regFirst.trim(),lastName:regLast.trim(),email:regEmail.trim().toLowerCase(),phone:regPhone.replace(/\D/g,""),passwordHash:hashData.hash,role:"Customer",deliveryLocation:regLocation};
       const docRef=await addDoc(collection(db,"kioskUsers"),newUser);
       placeOrder({id:docRef.id,...newUser});
     }catch(e){
@@ -212,7 +212,10 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
     if(resetNewPass.length<4){setResetErr("Password must be at least 4 characters.");return;}
     setResetLoading(true);setResetErr("");
     try{
-      await updateDoc(doc(db,"kioskUsers",resetUserId),{passwordHash:hashPassword(resetNewPass)});
+      const hashRes=await fetch("https://us-central1-testing-and-development-f696f.cloudfunctions.net/kioskHashPassword",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:resetNewPass})});
+      const hashData=await hashRes.json();
+      if(!hashData.hash)throw new Error("Hash failed");
+      await updateDoc(doc(db,"kioskUsers",resetUserId),{passwordHash:hashData.hash});
       setAuthMode("login");
       setAuthErr("");
       setAuthEmail(resetEmail);

@@ -11,10 +11,12 @@ service cloud.firestore {
     function isManager() { return role() in ['super_admin', 'manager', 'Super Admin']; }
     function isDelivery() { return role() in ['super_admin', 'manager', 'delivery', 'Super Admin']; }
 
-    // Menu & categories: public read (kiosk needs these), public stock update, admin full write
+    // Menu & categories: public read, stock-only public update, admin full write
     match /kioskMenu/{docId} {
       allow read: if true;
-      allow update: if true;  // Kiosk needs to decrement stock on order placement
+      // Public updates restricted to stock fields only (for kiosk order stock decrement)
+      allow update: if isManager()
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(["stock", "inStock", "updatedAt"]));
       allow create, delete: if isManager();
     }
     match /kioskCategories/{docId} {
@@ -34,7 +36,10 @@ service cloud.firestore {
     match /kioskUsers/{userId} {
       allow read: if isSignedIn();
       allow create: if true;
-      allow update: if isSignedIn() && (request.auth.uid == userId || isManager());
+      // Self-update allowed but cannot change own role; managers can change anything
+      allow update: if isManager()
+        || (isSignedIn() && request.auth.uid == userId
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(["role"]));
       allow delete: if isManager();
     }
 

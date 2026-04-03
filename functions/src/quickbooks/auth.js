@@ -26,10 +26,20 @@ function createOAuthClient() {
  */
 async function authUri(req, res) {
   const oauthClient = createOAuthClient();
+  const crypto = require("crypto");
+  const db = getFirestore();
+
+  // Generate a random CSRF token and store it in Firestore (short-lived)
+  const csrfToken = crypto.randomBytes(32).toString("hex");
+  await db.collection("qbTokens").doc("csrf").set({
+    token: csrfToken,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+  });
 
   const authUri = oauthClient.authorizeUri({
     scope: [OAuthClient.scopes.Accounting],
-    state: "champs-qb-auth", // CSRF protection token
+    state: csrfToken,
   });
 
   res.redirect(authUri);
@@ -42,8 +52,23 @@ async function authUri(req, res) {
  */
 async function callback(req, res) {
   const oauthClient = createOAuthClient();
+  const db = getFirestore();
 
   try {
+    // Verify CSRF token
+    const stateParam = new URL(req.url, `https://${req.headers.host}`).searchParams.get("state");
+    const csrfDoc = await db.collection("qbTokens").doc("csrf").get();
+
+    if (!csrfDoc.exists || csrfDoc.data().token !== stateParam || Date.now() > csrfDoc.data().expiresAt) {
+      console.error("OAuth CSRF verification failed");
+      const appUrl = QB_APP_URL.value();
+      res.redirect(`${appUrl}/admin?qb=error`);
+      return;
+    }
+
+    // Clean up CSRF token (one-time use)
+    await db.collection("qbTokens").doc("csrf").delete().catch(() => {});
+
     const authResponse = await oauthClient.createToken(req.url);
     const tokens = authResponse.getJson();
 
