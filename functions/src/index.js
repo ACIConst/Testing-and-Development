@@ -9,14 +9,22 @@ admin.initializeApp();
 const { authUri, callback, disconnect } = require("./quickbooks/auth");
 const { refreshToken } = require("./quickbooks/tokens");
 
-// Allow unauthenticated access with CORS for browser requests
-const publicOpts = { invoker: "public", cors: true };
+// CORS: restrict browser requests to our domain only
+const allowedOrigins = [
+  "https://cmbutchers.app",
+  "https://www.cmbutchers.app",
+  "http://localhost:5173",
+  "http://localhost:5174",
+];
+const publicOpts = { invoker: "public", cors: allowedOrigins };
+// OAuth/webhook endpoints need open CORS (redirects from QuickBooks)
+const openOpts = { invoker: "public", cors: true };
 
-// OAuth flow: redirects admin to QuickBooks authorization page
-exports.qbAuth = onRequest(publicOpts, authUri);
+// OAuth flow: redirects through QuickBooks, needs open CORS
+exports.qbAuth = onRequest(openOpts, authUri);
 
 // OAuth callback: QuickBooks redirects here after admin approves
-exports.qbCallback = onRequest(publicOpts, callback);
+exports.qbCallback = onRequest(openOpts, callback);
 
 // Disconnect: revokes tokens and cleans up
 exports.qbDisconnect = onRequest(publicOpts, disconnect);
@@ -24,9 +32,9 @@ exports.qbDisconnect = onRequest(publicOpts, disconnect);
 // Token refresh: called automatically or manually to refresh access token
 exports.qbRefreshToken = onRequest(publicOpts, refreshToken);
 
-// Webhook: receives notifications from QuickBooks (invoice changes, etc.)
+// Webhook: receives notifications from QuickBooks servers, needs open CORS
 const { handleWebhook } = require("./quickbooks/webhooks");
-exports.qbWebhook = onRequest(publicOpts, handleWebhook);
+exports.qbWebhook = onRequest(openOpts, handleWebhook);
 
 // Inventory sync: fetch QB products, import selected, refresh stock
 const { fetchQBProducts, importSelectedProducts, refreshStock, testConnection } = require("./quickbooks/sync-inventory");

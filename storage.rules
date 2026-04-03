@@ -2,13 +2,19 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    // Images: public read, admin-only write
+    // Kiosk customers should not be able to upload/modify images
     match /menu-images/{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if request.auth != null
+        && firestore.exists(/databases/(default)/documents/kioskUsers/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/kioskUsers/$(request.auth.uid)).data.role in ['super_admin', 'manager', 'Super Admin'];
     }
     match /barcode-images/{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if request.auth != null
+        && firestore.exists(/databases/(default)/documents/kioskUsers/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/kioskUsers/$(request.auth.uid)).data.role in ['super_admin', 'manager', 'Super Admin'];
     }
     match /{allPaths=**} {
       allow read, write: if false;

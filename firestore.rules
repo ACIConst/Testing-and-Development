@@ -49,26 +49,33 @@ service cloud.firestore {
       allow write: if isManager();
     }
 
-    // App config: public read, orderCounter needs public write for kiosk orders
+    // App config: public read, orderCounter public write (kiosk order ID generation)
+    // Validation: only allow incrementing lastNumber by 1, no other fields
     match /kioskConfig/orderCounter {
       allow read: if true;
-      allow write: if true;
+      allow write: if request.resource.data.keys().hasOnly(["lastNumber", "prefix"])
+        && request.resource.data.lastNumber is int
+        && request.resource.data.lastNumber == resource.data.lastNumber + 1;
     }
     match /kioskConfig/{docId} {
       allow read: if true;
       allow write: if isManager();
     }
 
-    // Inventory adjustments: authenticated read/write
+    // Inventory adjustments: admin-only (only managers adjust stock via admin panel)
     match /inventoryAdjustments/{docId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn();
+      allow create: if isManager();
+      allow update, delete: if false;
     }
 
-    // Audit logs: authenticated read, public create (kiosk orders log without auth)
+    // Audit logs: authenticated read, public create with structure validation
+    // Public create needed because kiosk orders log without Firebase Auth
     match /auditLogs/{docId} {
       allow read: if isSignedIn();
-      allow create: if true;
+      allow create: if request.resource.data.keys().hasAll(["action", "actorId", "actorName"])
+        && request.resource.data.action is string
+        && request.resource.data.action.size() < 100;
       allow update, delete: if isManager();
     }
 
