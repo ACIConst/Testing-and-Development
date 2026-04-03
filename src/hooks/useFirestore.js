@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   collection, doc,
   addDoc, setDoc, updateDoc, deleteDoc,
@@ -8,6 +8,62 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db, CF_BASE } from "../config/firebase";
+
+// ─── Resilient Firestore listener with auto-reconnect ────────────────────────
+// Handles: listener errors, iPad sleep/wake, background tab throttling
+const RECONNECT_DELAY = 3000;
+
+function useResilientSnapshot(queryOrRef, mapFn) {
+  const [data, setData] = useState([]);
+  const [ready, setReady] = useState(false);
+  const unsubRef = useRef(null);
+  const mountedRef = useRef(true);
+  const retryTimeoutRef = useRef(null);
+
+  const subscribe = useCallback(() => {
+    // Clean up existing listener
+    if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
+    clearTimeout(retryTimeoutRef.current);
+
+    unsubRef.current = onSnapshot(
+      queryOrRef,
+      (snap) => {
+        if (!mountedRef.current) return;
+        setData(snap.docs.map(mapFn));
+        setReady(true);
+      },
+      (error) => {
+        console.warn("Firestore listener error, reconnecting in 3s:", error.message);
+        if (!mountedRef.current) return;
+        setReady(true); // don't block UI
+        retryTimeoutRef.current = setTimeout(subscribe, RECONNECT_DELAY);
+      }
+    );
+  }, [queryOrRef, mapFn]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    subscribe();
+
+    // Reconnect when iPad/tab wakes from sleep
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        console.log("Tab visible — refreshing Firestore listeners");
+        subscribe();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      mountedRef.current = false;
+      if (unsubRef.current) unsubRef.current();
+      clearTimeout(retryTimeoutRef.current);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [subscribe]);
+
+  return { data, ready };
+}
 import { SEED_MENU, SEED_USERS, SEED_CATEGORIES, normalizeStatus } from "../styles/tokens";
 
 // ─── API layer imports (audit-logged) ────────────────────────────────────────
@@ -74,78 +130,39 @@ export function runSeeds() {
 
 // ─── Shared hooks ─────────────────────────────────────────────────────────────
 
+const menuQuery = collection(db, "kioskMenu");
+const menuMap = d => ({ id: d.id, ...d.data() });
 export function useMenu() {
-  const [menu, setMenu] = useState([]);
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, "kioskMenu"), snap => {
-      setMenu(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setReady(true);
-    }, () => setReady(true));
-    return unsub;
-  }, []);
+  const { data: menu, ready } = useResilientSnapshot(menuQuery, menuMap);
   return { menu, ready };
 }
 
+const usersQuery = collection(db, "kioskUsers");
+const usersMap = d => ({ id: d.id, ...d.data() });
 export function useUsers() {
-  const [users, setUsers] = useState([]);
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, "kioskUsers"), snap => {
-      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setReady(true);
-    }, () => setReady(true));
-    return unsub;
-  }, []);
+  const { data: users, ready } = useResilientSnapshot(usersQuery, usersMap);
   return { users, ready };
 }
 
-export function useOrders(maxResults = 200) {
-  const [orders, setOrders] = useState([]);
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    const q = query(
-      collection(db, "kioskOrders"),
-      orderBy("placedAt", "desc"),
-      limit(maxResults)
-    );
-    const unsub = onSnapshot(q, snap => {
-      setOrders(snap.docs.map(d => {
-        const data = d.data();
-        return { id: d.id, ...data, status: normalizeStatus(data.status) };
-      }));
-      setReady(true);
-    }, () => setReady(true));
-    return unsub;
-  }, [maxResults]);
+const ordersQuery = query(collection(db, "kioskOrders"), orderBy("placedAt", "desc"), limit(200));
+const ordersMap = d => { const data = d.data(); return { id: d.id, ...data, status: normalizeStatus(data.status) }; };
+export function useOrders() {
+  const { data: orders, ready } = useResilientSnapshot(ordersQuery, ordersMap);
   return { orders, ready };
 }
 
+const catsQuery = collection(db, "kioskCategories");
+const catsMap = d => ({ id: d.id, ...d.data() });
 export function useCategories() {
-  const [categories, setCategories] = useState([]);
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, "kioskCategories"), snap => {
-      const cats = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      cats.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-      setCategories(cats);
-      setReady(true);
-    }, () => setReady(true));
-    return unsub;
-  }, []);
+  const { data, ready } = useResilientSnapshot(catsQuery, catsMap);
+  const categories = [...data].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   return { categories, ready };
 }
 
+const adminsQuery = collection(db, "kioskAdmins");
+const adminsMap = d => ({ id: d.id, ...d.data() });
 export function useAdmins() {
-  const [adminAccounts, setAdminAccounts] = useState([]);
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, "kioskAdmins"), snap => {
-      setAdminAccounts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setReady(true);
-    }, () => setReady(true));
-    return unsub;
-  }, []);
+  const { data: adminAccounts, ready } = useResilientSnapshot(adminsQuery, adminsMap);
   return { adminAccounts, ready };
 }
 
