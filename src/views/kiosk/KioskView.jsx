@@ -112,6 +112,7 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
   const [hovered,setHovered]=useState(null);
   const [justAdded,setJustAdded]=useState(false);
   const [hideOOS,setHideOOS]=useState(false);
+  const [showDeliveryConfirm,setShowDeliveryConfirm]=useState(false);
   const exitHoldRef=useRef(null);
   const [exitProgress,setExitProgress]=useState(0);
 
@@ -285,10 +286,27 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:12,fontSize:15}}><span style={{color:C.muted}}>Subtotal ({cartQty} item{cartQty!==1?"s":""})</span><span style={{color:C.cream}}>${cartTotal.toFixed(2)}</span></div>
                   <div style={{height:1,background:C.border,marginBottom:14}}/>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:24}}><span style={{fontFamily:F.display,fontSize:22,color:C.cream}}>Total</span><span style={{fontFamily:F.display,fontSize:32,fontWeight:900,color:C.red}}>${cartTotal.toFixed(2)}</span></div>
-                  <KioskBtn primary fullWidth large onClick={()=>setView("checkout")}>Checkout {"\u2192"}</KioskBtn>
+                  <KioskBtn primary fullWidth large onClick={()=>setShowDeliveryConfirm(true)}>Checkout {"\u2192"}</KioskBtn>
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Delivery Date Confirmation */}
+      {showDeliveryConfirm&&(
+        <div style={{position:"fixed",inset:0,zIndex:999,background:"rgba(0,0,0,.7)",display:"flex",alignItems:"center",justifyContent:"center",padding:20,animation:"fadeUp .2s ease"}} onClick={()=>setShowDeliveryConfirm(false)}>
+          <div style={{...GLASS_MODAL,borderRadius:20,padding:"clamp(24px, 5vw, 36px)",maxWidth:420,width:"100%",textAlign:"center"}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:48,marginBottom:12}}>&#x1F4E6;</div>
+            <div style={{fontFamily:F.display,fontSize:"clamp(20px, 5vw, 26px)",fontWeight:900,color:C.cream,letterSpacing:1,marginBottom:8}}>Delivery Date</div>
+            <div style={{fontSize:14,color:C.muted,marginBottom:20}}>Your order will be delivered on</div>
+            <div style={{fontFamily:F.display,fontSize:"clamp(22px, 5vw, 30px)",fontWeight:900,color:C.red,marginBottom:20}}>Friday, {fmtDate(getDeliveryDate())}</div>
+            {!isOrderingOpen()&&<div style={{background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.3)",borderRadius:12,padding:"12px 16px",marginBottom:20,fontSize:13,color:"#fbbf24",lineHeight:1.5}}>Orders placed after Wednesday 3:00 PM are delivered the following Friday.</div>}
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              <KioskBtn primary fullWidth large onClick={()=>{setShowDeliveryConfirm(false);setView("checkout");}}>Continue to Checkout {"\u2192"}</KioskBtn>
+              <button onClick={()=>setShowDeliveryConfirm(false)} style={{background:"transparent",border:"none",color:C.muted,cursor:"pointer",fontFamily:F.body,fontSize:14,padding:8}}>{"\u2190"} Back to Cart</button>
+            </div>
           </div>
         </div>
       )}
