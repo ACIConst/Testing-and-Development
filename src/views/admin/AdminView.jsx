@@ -190,7 +190,7 @@ function AdminApp({ menu, users, orders, adminAccounts, categories, catNames, db
           {tab==="categories" &&<CategoriesManager categories={categories} menu={menu} dbOps={dbOps} showToast={showToast}/>}
           {tab==="users"      &&<UserManager users={users} dbOps={dbOps} showToast={showToast} isMobile={isMobile}/>}
           {tab==="orders"     &&<OrderHistory orders={orders} users={users} menu={menu} dbOps={dbOps} showToast={showToast}/>}
-          {tab==="delivery"   &&<DeliveryPanel orders={orders} users={users} dbOps={dbOps} showToast={showToast}/>}
+          {tab==="delivery"   &&<DeliveryPanel orders={orders} users={users} dbOps={dbOps} showToast={showToast} isMobile={isMobile}/>}
           {tab==="inventory"&&isSuperAdmin&&<InventoryHistoryPanel adjustments={adjustments}/>}
           {tab==="audit"&&isSuperAdmin&&<AuditLogPanel auditLogs={auditLogs}/>}
           {tab==="settings"&&<SettingsPanel showToast={showToast} adminAccounts={adminAccounts} dbOps={dbOps} currentAdmin={loggedInAdmin} isSuperAdmin={isSuperAdmin} categories={categories}/>}
@@ -349,13 +349,35 @@ function MenuManager({ menu, catNames, dbOps, showToast, isMobile }) {const{T:C,
         {[{label:"Total Items",value:menu.length,color:C.cream},{label:"On Kiosk",value:onCount,color:C.greenText},{label:"Hidden",value:offCount,color:C.muted}].map(s=><div key={s.label} style={{background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px"}}><div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.muted,marginBottom:8}}>{s.label}</div><div style={{fontFamily:F.display,fontSize:26,fontWeight:900,color:s.color}}>{s.value}</div></div>)}
       </div>
       <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search items\u2026" style={{...inputSt(false,C),flex:1,minWidth:180}}/>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search items…" style={{...inputSt(false,C),flex:1,minWidth:180}}/>
         <select value={filter} onChange={e=>setFilter(e.target.value)} style={inputSt(true,C)}><option value="All">All Categories</option>{catNames.map(c=><option key={c} value={c}>{c}</option>)}</select>
         <div style={{display:"flex",gap:4,background:C.card,border:"1px solid "+C.border,borderRadius:10,padding:3}}>{[{id:"all",label:"All ("+menu.length+")"},{id:"on",label:"On ("+onCount+")"},{id:"off",label:"Off ("+offCount+")"}].map(f=><button key={f.id} onClick={()=>setViewFilter(f.id)} style={{background:viewFilter===f.id?C.surface:"transparent",border:"1px solid "+(viewFilter===f.id?C.borderMid:"transparent"),color:viewFilter===f.id?C.cream:C.muted,borderRadius:7,padding:"5px 12px",cursor:"pointer",fontFamily:F.body,fontSize:12,fontWeight:600,transition:"all .15s"}}>{f.label}</button>)}</div>
         <Btn t={C} primary onClick={()=>{setEditing({...blank,category:catNames[0]||"Other"});setIsNew(true);}}>+ Add Item</Btn>
         <button onClick={()=>{setSelectMode(p=>!p);if(selectMode)setSelected(new Set());}} style={{background:selectMode?C.surface:"rgba(255,255,255,.03)",border:"1px solid "+(selectMode?C.red:C.border),color:selectMode?C.cream:C.muted,borderRadius:8,padding:"7px 14px",cursor:"pointer",fontFamily:F.body,fontSize:12,fontWeight:700,transition:"all .15s"}}>{selectMode?"\u2717 Cancel":"\u2610 Select"}</button>
         {selectMode&&selected.size>0&&<button onClick={()=>setConfirmBulkDel(true)} disabled={saving._bulk} style={{background:C.red,border:"none",color:C.cream,borderRadius:8,padding:"7px 14px",cursor:saving._bulk?"wait":"pointer",fontFamily:F.body,fontSize:12,fontWeight:700,opacity:saving._bulk?.5:1}}>Delete Selected ({selected.size})</button>}
       </div>
+      {/* Mobile: card layout */}
+      {isMobile?(<div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {selectMode&&<div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 4px"}}><input type="checkbox" checked={displayed.length>0&&displayed.every(i=>selected.has(i.id))} onChange={toggleSelectAll} style={{width:18,height:18,accentColor:C.red,cursor:"pointer"}}/><span style={{fontSize:13,color:C.muted}}>Select All</span></div>}
+        {displayed.length===0?<div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"40px",textAlign:"center",color:C.muted}}>No items found</div>
+        :displayed.map(item=>{const isOn=item.showOnKiosk!==false;const isSavingThis=saving[item.id];return(
+          <div key={item.id} onClick={()=>{if(selectMode){toggleSelect(item.id);}else{setEditing({...item,price:String(item.price),showOnKiosk:item.showOnKiosk!==false});setIsNew(false);}}} style={{background:selected.has(item.id)?"rgba(155,28,28,.08)":C.card,border:"1px solid "+(selected.has(item.id)?C.red:C.border),borderRadius:12,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",transition:"background .15s",opacity:isOn?1:.6}}>
+            {selectMode&&<input type="checkbox" checked={selected.has(item.id)} onChange={()=>toggleSelect(item.id)} onClick={e=>e.stopPropagation()} style={{width:18,height:18,accentColor:C.red,cursor:"pointer",flexShrink:0}}/>}
+            <Img src={item.image} alt={item.name} style={{width:44,height:44,objectFit:"cover",borderRadius:7,border:"1px solid "+C.border,flexShrink:0}}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:14,color:C.cream,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}{item.isBundle&&<span style={{background:"#1e40af",color:"#fff",fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4,marginLeft:6,letterSpacing:1,verticalAlign:"middle"}}>BUNDLE</span>}{item.qbItemId&&<span style={{background:"#0b5e2b",color:"#7ee8a8",fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4,marginLeft:6,letterSpacing:1,verticalAlign:"middle"}}>QB</span>}</div>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4}}>
+                <span style={{fontFamily:F.display,fontSize:15,color:C.red,fontWeight:700}}>${(item.price||0).toFixed(2)}</span>
+                <span style={{background:C.surface,border:"1px solid "+C.border,borderRadius:5,padding:"2px 8px",fontSize:10,color:C.muted}}>{item.category}</span>
+              </div>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+              <span style={{width:8,height:8,borderRadius:"50%",background:isOn?C.greenText:C.muted,display:"inline-block"}}/>
+              <span style={{color:C.muted,fontSize:18}}>{"\u203A"}</span>
+            </div>
+          </div>);})}
+      </div>):(
+      /* Desktop: full table */
       <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,overflow:"hidden"}}><div style={{overflowX:"auto"}}><div style={{minWidth:750}}>
         <div style={{display:"grid",gridTemplateColumns:(selectMode?"36px ":"")+"44px 60px 1fr 130px 90px 100px 140px",borderBottom:"1px solid "+C.border,padding:"9px 16px",alignItems:"center"}}>{selectMode&&<div style={{display:"flex",alignItems:"center",justifyContent:"center"}}><input type="checkbox" checked={displayed.length>0&&displayed.every(i=>selected.has(i.id))} onChange={toggleSelectAll} style={{width:16,height:16,accentColor:C.red,cursor:"pointer"}}/></div>}{["","Image","Name","Category","Price","Kiosk","Actions"].map(h=><div key={h||"order"} style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.muted}}>{h}</div>)}</div>
         {displayed.length===0?<div style={{padding:"40px",textAlign:"center",color:C.muted}}>No items found</div>:displayed.map((item,dispIdx)=>{const isOn=item.showOnKiosk!==false;const isSavingThis=saving[item.id];const onIdx=onMenuSorted.indexOf(item);return(
@@ -369,7 +391,7 @@ function MenuManager({ menu, catNames, dbOps, showToast, isMobile }) {const{T:C,
             <div><button onClick={()=>toggleKiosk(item)} disabled={isSavingThis} style={{background:isOn?C.green:C.surface,color:isOn?C.greenText:C.muted,border:"1px solid "+(isOn?"rgba(74,222,128,.3)":C.border),borderRadius:20,padding:"6px 14px",cursor:isSavingThis?"wait":"pointer",fontFamily:F.body,fontSize:12,fontWeight:700,transition:"all .2s",opacity:isSavingThis?.5:1,minWidth:80,textAlign:"center"}}>{isSavingThis?"\u2026":isOn?"\u25CF On":"\u25CB Off"}</button></div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}><button onClick={()=>{setEditing({...item,price:String(item.price),showOnKiosk:item.showOnKiosk!==false});setIsNew(false);}} style={smallBtn(false,false,C)}>Edit</button><button onClick={()=>setConfirmDel(item.id)} style={smallBtn(true,false,C)}>Del</button></div>
           </div>);})}
-      </div></div></div>
+      </div></div></div>)}
       {editing&&<ItemModal item={editing} isNew={isNew} saving={saving._save} catNames={catNames} menu={menu} onChange={p=>setEditing(prev=>({...prev,...p}))} onSave={()=>saveItem(editing)} onClose={()=>setEditing(null)}/>}
       {confirmDel&&<ConfirmModal t={C}message={"Delete \""+((menu.find(m=>m.id===confirmDel)||{}).name||"")+"\"? This cannot be undone."} confirmLabel="Delete Item" danger onConfirm={()=>deleteItem(confirmDel)} onClose={()=>setConfirmDel(null)}/>}
       {confirmBulkDel&&<ConfirmModal t={C}message={"Delete "+selected.size+" selected item"+(selected.size!==1?"s":"")+"? This cannot be undone."} confirmLabel={"Delete "+selected.size+" Item"+(selected.size!==1?"s":"")} danger onConfirm={()=>{setConfirmBulkDel(false);deleteSelected();}} onClose={()=>setConfirmBulkDel(false)}/>}
@@ -398,7 +420,7 @@ function ItemModal({item,isNew,saving,catNames,onChange,onSave,onClose,menu}){co
       <div style={{display:"flex",gap:10,alignItems:"center"}}>
         <label style={{background:C.surface,border:"1px solid "+C.border,borderRadius:10,padding:"10px 16px",cursor:"pointer",fontFamily:F.body,fontSize:13,color:C.muted,fontWeight:600,whiteSpace:"nowrap"}}>{uploading?"Uploading\u2026":"Upload Photo"}<input type="file" accept="image/*" onChange={handlePhotoUpload} style={{display:"none"}}/></label>
         <div style={{fontSize:12,color:C.muted}}>or</div>
-        <input value={item.image||""} onChange={e=>onChange({image:e.target.value})} placeholder="Paste image URL\u2026" style={{...inputSt(false,C),flex:1}}/>
+        <input value={item.image||""} onChange={e=>onChange({image:e.target.value})} placeholder="Paste image URL…" style={{...inputSt(false,C),flex:1}}/>
       </div>
     </Field>
     {item.image&&<div style={{marginBottom:14}}><Img src={item.image} alt="preview" style={{height:110,width:"100%",objectFit:"cover",borderRadius:10,border:"1px solid "+C.border}}/></div>}</>}
@@ -433,7 +455,7 @@ function CategoriesManager({ categories, menu, dbOps, showToast }) {const{T:C,TF
     <div style={{animation:"fadeUp .3s ease",maxWidth:580}}>
       <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"18px 20px",marginBottom:18}}>
         <div style={{fontSize:12,letterSpacing:2,textTransform:"uppercase",color:C.muted,marginBottom:12}}>Add New Category</div>
-        <div style={{display:"flex",gap:10}}><input ref={inputRef} value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAdd()} placeholder="e.g. BBQ, Spices, Seafood\u2026" style={{...inputSt(false,C),flex:1}}/><Btn t={C} primary onClick={handleAdd} disabled={!newName.trim()||saving}>{saving?"Adding\u2026":"+ Add"}</Btn></div>
+        <div style={{display:"flex",gap:10}}><input ref={inputRef} value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAdd()} placeholder="e.g. BBQ, Spices, Seafood…" style={{...inputSt(false,C),flex:1}}/><Btn t={C} primary onClick={handleAdd} disabled={!newName.trim()||saving}>{saving?"Adding\u2026":"+ Add"}</Btn></div>
       </div>
       <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,overflow:"hidden"}}>
         <div style={{display:"grid",gridTemplateColumns:"44px 1fr 80px 110px",borderBottom:"1px solid "+C.border,padding:"9px 18px"}}>{["","Category Name","Items","Actions"].map(h=><div key={h||"drag"} style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.muted}}>{h}</div>)}</div>
@@ -528,7 +550,7 @@ function UserModal({user,isNew,saving,onChange,onSave,onClose}){const{T:C,TF:F}=
 // ═══════════════════════════════════════════════════════════════════════════════
 // Delivery Panel — grouped by location
 // ═══════════════════════════════════════════════════════════════════════════════
-function DeliveryPanel({ orders, users, dbOps, showToast }) {const{T:C,TF:F}=useAdminTheme();
+function DeliveryPanel({ orders, users, dbOps, showToast, isMobile }) {const{T:C,TF:F}=useAdminTheme();
   const [savingId,setSavingId]=useState(null);
   const deliveryOrders=orders.filter(o=>!o.archived&&normalizeStatus(o.status)==="out_for_delivery");
   const locations=[...new Set(deliveryOrders.map(o=>o.deliveryLocation||"No Location"))].sort();
@@ -550,15 +572,17 @@ function DeliveryPanel({ orders, users, dbOps, showToast }) {const{T:C,TF:F}=use
           <div style={{fontSize:13,color:C.muted,marginBottom:18}}>{deliveryOrders.length} order{deliveryOrders.length!==1?"s":""} awaiting delivery across {locations.length} location{locations.length!==1?"s":""}</div>
           {locations.map(loc=>{const locOrders=deliveryOrders.filter(o=>(o.deliveryLocation||"No Location")===loc);const locTotal=locOrders.reduce((s,o)=>s+(o.total||0),0);return(
             <div key={loc} style={{marginBottom:24}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{fontFamily:F.display,fontSize:18,fontWeight:900,letterSpacing:1,color:C.cream}}>{loc}</div><span style={{background:"#6b21a8",color:"#d8b4fe",borderRadius:20,padding:"3px 12px",fontSize:12,fontWeight:700}}>{locOrders.length} order{locOrders.length!==1?"s":""}</span><span style={{fontSize:14,color:C.red,fontFamily:F.display,fontWeight:700}}>${locTotal.toFixed(2)}</span></div>
-                <button onClick={()=>markAllDelivered(loc)} style={{background:"#6b21a8",color:"#d8b4fe",border:"1px solid #7c3aed",borderRadius:10,padding:"8px 16px",cursor:"pointer",fontFamily:F.body,fontSize:13,fontWeight:700}}>Deliver All at {loc}</button>
+              <div style={{display:"flex",flexWrap:"wrap",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:10}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}><div style={{fontFamily:F.display,fontSize:18,fontWeight:900,letterSpacing:1,color:C.cream}}>{loc}</div><span style={{background:"#6b21a8",color:"#d8b4fe",borderRadius:20,padding:"3px 12px",fontSize:12,fontWeight:700}}>{locOrders.length} order{locOrders.length!==1?"s":""}</span><span style={{fontSize:14,color:C.red,fontFamily:F.display,fontWeight:700}}>${locTotal.toFixed(2)}</span></div>
+                <button onClick={()=>markAllDelivered(loc)} style={{background:"#6b21a8",color:"#d8b4fe",border:"1px solid #7c3aed",borderRadius:10,padding:"8px 16px",cursor:"pointer",fontFamily:F.body,fontSize:13,fontWeight:700,width:isMobile?"100%":"auto"}}>Deliver All at {loc}</button>
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>{locOrders.map(order=>(
-                <div key={order.id} style={{background:C.card,border:"1px solid "+C.borderMid,borderRadius:12,padding:"14px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+                <div key={order.id} style={{background:C.card,border:"1px solid "+C.borderMid,borderRadius:12,padding:"14px 18px",display:"flex",flexDirection:isMobile?"column":"row",alignItems:isMobile?"stretch":"center",justifyContent:"space-between",gap:12}}>
                   <div style={{flex:1,minWidth:0}}><div style={{fontSize:15,color:C.cream,fontWeight:600}}>#{order.orderNumber||""} — {order.user||"Unknown"}</div><div style={{fontSize:12,color:C.muted,marginTop:2}}>{order.items?.map(i=>i.name+" \u00D7"+i.quantity).join(", ")}</div><div style={{fontSize:12,color:C.muted,marginTop:1}}>{order.ts?new Date(order.ts).toLocaleDateString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):""}</div></div>
-                  <div style={{fontFamily:F.display,fontSize:20,fontWeight:900,color:C.red,flexShrink:0,marginRight:12}}>${(order.total||0).toFixed(2)}</div>
-                  <button onClick={()=>markDelivered(order)} disabled={savingId===order.id} style={{background:"#6b21a8",color:"#d8b4fe",border:"1px solid #7c3aed",borderRadius:10,padding:"10px 20px",cursor:savingId===order.id?"wait":"pointer",fontFamily:F.display,fontSize:14,fontWeight:900,letterSpacing:1,textTransform:"uppercase",opacity:savingId===order.id?.6:1,whiteSpace:"nowrap"}}>{savingId===order.id?"...":"Delivered"}</button>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:isMobile?"space-between":"flex-end",gap:12}}>
+                    <div style={{fontFamily:F.display,fontSize:20,fontWeight:900,color:C.red,flexShrink:0}}>${(order.total||0).toFixed(2)}</div>
+                    <button onClick={()=>markDelivered(order)} disabled={savingId===order.id} style={{background:"#6b21a8",color:"#d8b4fe",border:"1px solid #7c3aed",borderRadius:10,padding:"10px 20px",cursor:savingId===order.id?"wait":"pointer",fontFamily:F.display,fontSize:14,fontWeight:900,letterSpacing:1,textTransform:"uppercase",opacity:savingId===order.id?.6:1,whiteSpace:"nowrap"}}>{savingId===order.id?"...":"Delivered"}</button>
+                  </div>
                 </div>))}</div>
             </div>);})}
         </>
@@ -719,7 +743,7 @@ function OrderHistory({ orders, users, menu, dbOps, showToast }) {const{T:C,TF:F
       <div style={{display:"flex",gap:4,marginBottom:16,background:C.card,border:"1px solid "+C.border,borderRadius:12,padding:4,width:"fit-content"}}>{[{id:"active",label:"Active ("+active.length+")"},{id:"cancelled",label:"Cancelled ("+cancelled.length+")",color:C.errorBg,activeColor:C.errorText},{id:"archived",label:"Archived ("+archived.length+")"}].map(t=><button key={t.id} onClick={()=>{setView(t.id);setExpanded(null);setSearch("");setStatusFilter("all");setCustomerFilter("all");}} style={{background:view===t.id?(t.color||C.red):"transparent",border:"none",color:view===t.id?(t.activeColor||C.cream):C.muted,borderRadius:8,padding:"8px 18px",cursor:"pointer",fontFamily:F.body,fontSize:14,fontWeight:600,transition:"all .15s"}}>{t.label}</button>)}</div>
       {view==="active"&&<div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}><button onClick={()=>setStatusFilter("all")} style={{background:statusFilter==="all"?C.surface:"transparent",border:"1px solid "+(statusFilter==="all"?C.borderMid:C.border),color:statusFilter==="all"?C.cream:C.muted,borderRadius:20,padding:"5px 14px",cursor:"pointer",fontFamily:F.body,fontSize:13}}>All ({active.length})</button>{ORDER_STATUSES.filter(s=>s.id!==terminalStatus).map(s=><button key={s.id} onClick={()=>setStatusFilter(s.id)} style={{background:statusFilter===s.id?s.color:"transparent",color:statusFilter===s.id?s.text:C.muted,border:"1px solid "+(statusFilter===s.id?s.color:C.border),borderRadius:20,padding:"5px 14px",cursor:"pointer",fontFamily:F.body,fontSize:13,fontWeight:statusFilter===s.id?700:400}}>{s.label} ({counts[s.id]||0})</button>)}</div>}
       {view==="archived"&&archivedCustomers.length>0&&<div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}><button onClick={()=>setCustomerFilter("all")} style={{background:customerFilter==="all"?C.surface:"transparent",border:"1px solid "+(customerFilter==="all"?C.borderMid:C.border),color:customerFilter==="all"?C.cream:C.muted,borderRadius:20,padding:"5px 14px",cursor:"pointer",fontFamily:F.body,fontSize:13}}>All ({archived.length})</button>{archivedCustomers.map(name=>{const count=archived.filter(o=>o.user===name).length;return<button key={name} onClick={()=>setCustomerFilter(name)} style={{background:customerFilter===name?C.red:"transparent",color:customerFilter===name?C.cream:C.muted,border:"1px solid "+(customerFilter===name?C.red:C.border),borderRadius:20,padding:"5px 14px",cursor:"pointer",fontFamily:F.body,fontSize:13,fontWeight:customerFilter===name?700:400}}>{name} ({count})</button>;})}</div>}
-      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search\u2026" style={{...inputSt(false,C),flex:1,minWidth:200}}/><div style={{fontSize:13,color:C.muted}}>{filtered.length} order{filtered.length!==1?"s":""} {"\u00B7"} <span style={{color:C.red,fontFamily:F.display,fontSize:16}}>${totalRev.toFixed(2)}</span></div>{view==="active"&&active.length>0&&<button onClick={()=>setConfirmClear(true)} style={{background:C.amber,border:"1px solid "+C.amber,color:"#1c1400",borderRadius:10,padding:"9px 14px",cursor:"pointer",fontFamily:F.body,fontSize:13,fontWeight:700}}>Archive All</button>}</div>
+      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…" style={{...inputSt(false,C),flex:1,minWidth:200}}/><div style={{fontSize:13,color:C.muted}}>{filtered.length} order{filtered.length!==1?"s":""} {"\u00B7"} <span style={{color:C.red,fontFamily:F.display,fontSize:16}}>${totalRev.toFixed(2)}</span></div>{view==="active"&&active.length>0&&<button onClick={()=>setConfirmClear(true)} style={{background:C.amber,border:"1px solid "+C.amber,color:"#1c1400",borderRadius:10,padding:"9px 14px",cursor:"pointer",fontFamily:F.body,fontSize:13,fontWeight:700}}>Archive All</button>}</div>
       {filtered.length===0?<div style={{background:C.card,border:"1px solid "+C.border,borderRadius:14,padding:"60px",textAlign:"center",color:C.muted}}>{view==="archived"?"No archived orders":view==="cancelled"?"No cancelled orders":"No orders match your filters"}</div>:(
         <div style={{display:"flex",flexDirection:"column",gap:8}}>{filtered.map(order=>{const isExpanded=expanded===order.id;const checkedItems=order.checkedItems||[];const totalItems=order.items?.length||0;const allChecked=totalItems>0&&checkedItems.length===totalItems;const curStatus=getStatus(order);const orderCancelled=curStatus==="cancelled";const nextStatuses=ORDER_STATUSES.filter(s=>canTransition(curStatus,s.id));return(
           <div key={order.id} style={{background:orderCancelled?"rgba(69,10,10,.15)":C.card,border:"2px solid "+(orderCancelled?C.red+"44":isExpanded?C.borderMid:C.border),borderRadius:12,overflow:"hidden",transition:"border .2s",opacity:orderCancelled?.75:1}}>
