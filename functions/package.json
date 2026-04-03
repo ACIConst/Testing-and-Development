@@ -2,7 +2,7 @@
   "name": "champs-butcher-functions",
   "description": "Cloud Functions for Champ's Butcher Shop — QuickBooks integration",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "main": "src/index.js",
   "scripts": {
