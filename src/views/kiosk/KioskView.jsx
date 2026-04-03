@@ -116,7 +116,7 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
   const [exitProgress,setExitProgress]=useState(0);
 
   const cats=["All",...categories];
-  const filtered=(activeCat==="All"?menu:menu.filter(i=>i.category===activeCat)).filter(i=>i.showOnKiosk!==false).filter(i=>!hideOOS||i.inStock).sort((a,b)=>(a.menuOrder||999)-(b.menuOrder||999));
+  const filtered=(activeCat==="All"?menu:menu.filter(i=>i.category===activeCat)).filter(i=>i.showOnKiosk!==false).filter(i=>!hideOOS||i.inStock).sort((a,b)=>(a.menuOrder??999)-(b.menuOrder??999));
   const cartQty=cart.reduce((s,i)=>s+i.quantity,0);
   const cartTotal=cart.reduce((s,i)=>s+i.price*i.quantity,0);
 
