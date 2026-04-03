@@ -166,19 +166,34 @@ async function sendInvoice(req, res) {
       return;
     }
 
-    // First update the invoice with BillEmail so QB knows where to send
-    const invoiceRead = await qbGet(`invoice/${order.qbInvoiceId}`);
-    const invoice = invoiceRead.Invoice;
-    await qbPost("invoice", {
-      Id: invoice.Id,
-      SyncToken: invoice.SyncToken,
-      sparse: true,
-      BillEmail: { Address: email },
-      DeliveryInfo: { DeliveryType: "Email", DeliveryAddress: { Address: email } },
-    });
+    // Send invoice email — QB requires Content-Type: application/octet-stream (not JSON)
+    const { getValidToken } = require("./tokens");
+    const { defineString } = require("firebase-functions/params");
+    const { accessToken, realmId } = await getValidToken();
+    const env = defineString("QB_ENVIRONMENT").value();
+    const baseUrl = env === "production"
+      ? "https://quickbooks.api.intuit.com/v3/company"
+      : "https://sandbox-quickbooks.api.intuit.com/v3/company";
 
-    // Now send — QB should have the email on the invoice
-    const result = await qbPost(`invoice/${order.qbInvoiceId}/send?sendTo=${encodeURIComponent(email)}`, {});
+    const sendRes = await fetch(
+      `${baseUrl}/${realmId}/invoice/${order.qbInvoiceId}/send?sendTo=${encodeURIComponent(email)}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+          "Content-Type": "application/octet-stream",
+        },
+      }
+    );
+
+    if (!sendRes.ok) {
+      const errBody = await sendRes.text();
+      const intuitTid = sendRes.headers.get("intuit_tid") || "unknown";
+      console.error(`Send invoice failed [intuit_tid: ${intuitTid}]:`, errBody);
+      throw new Error(`Send failed (${sendRes.status}): ${errBody}`);
+    }
+    const result = await sendRes.json();
 
     // Mark as sent on the order
     await orderDoc.ref.update({
