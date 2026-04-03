@@ -33,7 +33,7 @@ import { isOrderingOpen, getWeekOf, fmt$, fmtDate } from "../../utils";
 
 import { collection, doc, addDoc, getDoc, setDoc, writeBatch } from "firebase/firestore"; import { getAuth, signOut } from "firebase/auth";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db } from "../../config/firebase";
+import { db, CF_BASE } from "../../config/firebase";
 
 const storage = getStorage();
 
@@ -714,7 +714,7 @@ function OrderBarcode({value,small}){
 
 function OrderHistory({ orders, users, menu, dbOps, showToast }) {const{T:C,TF:F}=useAdminTheme();
   const [search,setSearch]=useState("");const [expanded,setExpanded]=useState(null);const [confirmClear,setConfirmClear]=useState(false);const [view,setView]=useState("active");const [statusFilter,setStatusFilter]=useState("all");const [savingStatus,setSavingStatus]=useState(null);const [customerFilter,setCustomerFilter]=useState("all");const [scanBarcode,setScanBarcode]=useState(null);const [confirmCancel,setConfirmCancel]=useState(null);const [sendingInvoice,setSendingInvoice]=useState(null);
-  const QB_SEND_URL="https://us-central1-testing-and-development-f696f.cloudfunctions.net/qbSendInvoice";
+  const QB_SEND_URL=`${CF_BASE}/qbSendInvoice`;
   const terminalStatus="delivered";
   function getStatus(order){return normalizeStatus(order.status);}
   const isCancelled=o=>getStatus(o)==="cancelled";
@@ -936,7 +936,7 @@ function SettingsQuickBooks({C,F,showToast,cardSt,secTitle,isSuperAdmin,categori
   const [showProductPicker,setShowProductPicker]=useState(false);
   const [qbProducts,setQbProducts]=useState([]);const [selectedProducts,setSelectedProducts]=useState({});const [importing,setImporting]=useState(false);
   const [refreshing,setRefreshing]=useState(false);
-  const QB_BASE="https://us-central1-testing-and-development-f696f.cloudfunctions.net";
+  const QB_BASE=CF_BASE;
   const QB_AUTH_URL=QB_BASE+"/qbAuth";
   const QB_DISCONNECT_URL=QB_BASE+"/qbDisconnect";
   const QB_TEST_URL=QB_BASE+"/qbTestConnection";

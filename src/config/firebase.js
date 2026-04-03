@@ -14,3 +14,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+
+// Cloud Functions base URL — derived from project ID
+const region = import.meta.env.VITE_CF_REGION || "us-central1";
+const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
+export const CF_BASE = `https://${region}-${projectId}.cloudfunctions.net`;

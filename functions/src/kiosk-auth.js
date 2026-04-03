@@ -3,6 +3,29 @@ const { getFirestore } = require("firebase-admin/firestore");
 
 const BCRYPT_ROUNDS = 12;
 
+// --- Rate limiting (in-memory, per Cloud Function instance) ---
+const RATE_WINDOW_MS = 60 * 1000; // 1 minute
+const MAX_VERIFY_PER_IP = 10;     // 10 login attempts per minute
+const MAX_HASH_PER_IP = 5;        // 5 registrations per minute
+const rateCounts = {};
+
+function isRateLimited(ip, limit) {
+  const now = Date.now();
+  if (!rateCounts[ip] || rateCounts[ip].reset < now) {
+    rateCounts[ip] = { count: 1, reset: now + RATE_WINDOW_MS };
+    return false;
+  }
+  rateCounts[ip].count++;
+  return rateCounts[ip].count > limit;
+}
+// Clean up stale entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const ip in rateCounts) {
+    if (rateCounts[ip].reset < now) delete rateCounts[ip];
+  }
+}, 5 * 60 * 1000);
+
 // Old FNV-1a hash for migration detection
 function legacyHash(raw) {
   let h = 0x811c9dc5;
@@ -26,6 +49,12 @@ function isLegacyHash(hash) {
  * Returns: { success, user } or { success: false, error }
  */
 async function verifyPassword(req, res) {
+  const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
+  if (isRateLimited(ip, MAX_VERIFY_PER_IP)) {
+    res.status(429).json({ success: false, error: "Too many attempts. Please wait a minute." });
+    return;
+  }
+
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -82,6 +111,12 @@ async function verifyPassword(req, res) {
  * Returns: { hash }
  */
 async function hashPassword(req, res) {
+  const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
+  if (isRateLimited(ip, MAX_HASH_PER_IP)) {
+    res.status(429).json({ error: "Too many attempts. Please wait a minute." });
+    return;
+  }
+
   const { password } = req.body;
 
   if (!password || password.length < 4) {

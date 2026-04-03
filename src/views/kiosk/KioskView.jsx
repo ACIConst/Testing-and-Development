@@ -7,7 +7,7 @@ import { Img } from "../../components/Img";
 import { KioskBtn, KQtyBtn, ModeLoadingScreen } from "../../components/ui";
 import { isOrderingOpen, getDeliveryDate, fmtDate } from "../../utils";
 import { addDoc, updateDoc, doc, collection } from "firebase/firestore";
-import { db } from "../../config/firebase";
+import { db, CF_BASE } from "../../config/firebase";
 
 function CutoffBanner() {
   const open = isOrderingOpen();
@@ -156,7 +156,7 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
     if(!authEmail.trim()||!authPass){setAuthErr("Enter your email and password.");return;}
     setAuthLoading(true);setAuthErr("");
     try{
-      const res=await fetch("https://us-central1-testing-and-development-f696f.cloudfunctions.net/kioskVerifyPassword",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:authEmail.trim(),password:authPass})});
+      const res=await fetch(`${CF_BASE}/kioskVerifyPassword`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:authEmail.trim(),password:authPass})});
       const data=await res.json();
       if(data.success){placeOrder(data.user);}
       else{setAuthErr(data.error==="Invalid credentials"?"Invalid email or password.":"Login failed. Try again.");setShaking(true);setTimeout(()=>setShaking(false),700);}
@@ -175,7 +175,7 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
     setRegLoading(true);setRegErr("");
     try{
       // Hash password server-side with bcrypt
-      const hashRes=await fetch("https://us-central1-testing-and-development-f696f.cloudfunctions.net/kioskHashPassword",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:regPass})});
+      const hashRes=await fetch(`${CF_BASE}/kioskHashPassword`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:regPass})});
       const hashData=await hashRes.json();
       if(!hashData.hash)throw new Error("Hash failed");
       const newUser={firstName:regFirst.trim(),lastName:regLast.trim(),email:regEmail.trim().toLowerCase(),phone:regPhone.replace(/\D/g,""),passwordHash:hashData.hash,role:"Customer",deliveryLocation:regLocation};
@@ -213,7 +213,7 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
     if(resetNewPass.length<4){setResetErr("Password must be at least 4 characters.");return;}
     setResetLoading(true);setResetErr("");
     try{
-      const hashRes=await fetch("https://us-central1-testing-and-development-f696f.cloudfunctions.net/kioskHashPassword",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:resetNewPass})});
+      const hashRes=await fetch(`${CF_BASE}/kioskHashPassword`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:resetNewPass})});
       const hashData=await hashRes.json();
       if(!hashData.hash)throw new Error("Hash failed");
       await updateDoc(doc(db,"kioskUsers",resetUserId),{passwordHash:hashData.hash});

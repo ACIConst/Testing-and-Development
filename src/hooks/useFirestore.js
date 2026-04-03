@@ -7,7 +7,7 @@ import {
   orderBy, limit,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "../config/firebase";
+import { db, CF_BASE } from "../config/firebase";
 import { SEED_MENU, SEED_USERS, SEED_CATEGORIES, normalizeStatus } from "../styles/tokens";
 
 // ─── API layer imports (audit-logged) ────────────────────────────────────────
@@ -172,7 +172,7 @@ export function createDbOps(menu, categories) {
   const _clearOrders = () => archiveAllActiveOrders();
 
   // Admin accounts — bcrypt hashing via Cloud Function
-  const HASH_URL = "https://us-central1-testing-and-development-f696f.cloudfunctions.net/kioskHashPassword";
+  const HASH_URL = `${CF_BASE}/kioskHashPassword`;
   const addAdminAccount = async (data) => {
     const res = await fetch(HASH_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: data.password }) });
     const { hash } = await res.json();
