@@ -7,6 +7,8 @@ import { useGlobalStyles } from "./hooks/useGlobalStyles";
 const LandingPage = lazy(() => import("./views/landing/LandingPage"));
 const KioskView = lazy(() => import("./views/kiosk/KioskView"));
 const AdminView = lazy(() => import("./views/admin/AdminView"));
+const LegalPages = lazy(() => import("./views/legal/LegalPages").then(m => ({ default: m.PrivacyPolicy })));
+const TermsPage = lazy(() => import("./views/legal/LegalPages").then(m => ({ default: m.TermsOfService })));
 
 export default function App() {
   useGlobalStyles();
@@ -17,6 +19,8 @@ export default function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/kiosk" element={<KioskView />} />
           <Route path="/admin" element={<OperatorGate><AdminView /></OperatorGate>} />
+          <Route path="/privacy" element={<LegalPages />} />
+          <Route path="/terms" element={<TermsPage />} />
         </Routes>
       </Suspense>
     </ErrorBoundary>

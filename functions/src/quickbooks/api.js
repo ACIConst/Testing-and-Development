@@ -10,6 +10,20 @@ function getBaseUrl() {
 }
 
 /**
+ * Build a QB API error with intuit_tid for Intuit's support/assessment requirements.
+ * intuit_tid is a transaction ID that Intuit uses to trace API calls in their system.
+ */
+function buildQBError(method, endpoint, res, body) {
+  const intuitTid = res.headers.get("intuit_tid") || "unknown";
+  const msg = `QB API ${method} ${endpoint} failed (${res.status}) [intuit_tid: ${intuitTid}]: ${body}`;
+  console.error(msg);
+  const err = new Error(msg);
+  err.intuit_tid = intuitTid;
+  err.statusCode = res.status;
+  return err;
+}
+
+/**
  * Make a GET request to the QuickBooks API.
  * @param {string} endpoint - e.g., "companyinfo/12345" or "query?query=SELECT..."
  */
@@ -26,7 +40,7 @@ async function qbGet(endpoint) {
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`QB API GET ${endpoint} failed (${res.status}): ${body}`);
+    throw buildQBError("GET", endpoint, res, body);
   }
   return res.json();
 }
@@ -52,7 +66,7 @@ async function qbPost(endpoint, body) {
 
   if (!res.ok) {
     const errBody = await res.text();
-    throw new Error(`QB API POST ${endpoint} failed (${res.status}): ${errBody}`);
+    throw buildQBError("POST", endpoint, res, errBody);
   }
   return res.json();
 }
