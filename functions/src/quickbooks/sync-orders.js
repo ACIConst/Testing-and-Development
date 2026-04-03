@@ -166,18 +166,22 @@ async function sendInvoice(req, res) {
       return;
     }
 
-    // First, read the invoice to get SyncToken, then update it with BillEmail
+    // Update invoice with BillEmail, then send using sendTo query param
     const invoiceRead = await qbGet(`invoice/${order.qbInvoiceId}`);
     const invoice = invoiceRead.Invoice;
-    await qbPost("invoice", {
+
+    // Update the invoice to include BillEmail
+    const updated = await qbPost("invoice", {
       Id: invoice.Id,
       SyncToken: invoice.SyncToken,
       sparse: true,
       BillEmail: { Address: email },
+      EmailStatus: "NeedToSend",
     });
 
-    // Now send the invoice
-    const result = await qbPost(`invoice/${order.qbInvoiceId}/send`, {});
+    // Send using the updated SyncToken and sendTo param
+    const newSyncToken = updated.Invoice?.SyncToken || invoice.SyncToken;
+    const result = await qbPost(`invoice/${order.qbInvoiceId}/send?sendTo=${encodeURIComponent(email)}`, {});
 
     // Mark as sent on the order
     await orderDoc.ref.update({
