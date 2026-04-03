@@ -1,5 +1,5 @@
 const { getFirestore } = require("firebase-admin/firestore");
-const { qbQuery, qbPost } = require("./api");
+const { qbQuery, qbPost, qbGet } = require("./api");
 
 /**
  * Firestore onCreate trigger: when a kiosk order is placed, create an Invoice in QuickBooks.
@@ -166,8 +166,18 @@ async function sendInvoice(req, res) {
       return;
     }
 
-    // QB /send endpoint requires email as query parameter
-    const result = await qbPost(`invoice/${order.qbInvoiceId}/send?sendTo=${encodeURIComponent(email)}`, {});
+    // First, read the invoice to get SyncToken, then update it with BillEmail
+    const invoiceRead = await qbGet(`invoice/${order.qbInvoiceId}`);
+    const invoice = invoiceRead.Invoice;
+    await qbPost("invoice", {
+      Id: invoice.Id,
+      SyncToken: invoice.SyncToken,
+      sparse: true,
+      BillEmail: { Address: email },
+    });
+
+    // Now send the invoice
+    const result = await qbPost(`invoice/${order.qbInvoiceId}/send`, {});
 
     // Mark as sent on the order
     await orderDoc.ref.update({
