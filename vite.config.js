@@ -8,12 +8,17 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
         navigateFallback: '/index.html',
         navigateFallbackAllowlist: [/^\/(?!__).*/],
-        // Don't let the SW intercept Google Fonts — browser handles CORS caching natively
+        // Skip cross-origin font requests entirely — let the browser handle them
         navigateFallbackDenylist: [/^\/__(.*)/],
         runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
+            handler: 'NetworkOnly',
+            options: { cacheName: 'google-fonts-bypass' }
+          },
           {
             urlPattern: /^https:\/\/.*\.firebasestorage\.app\/.*/i,
             handler: 'StaleWhileRevalidate',
