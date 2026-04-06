@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { C, F, GLASS, GLASS_MODAL, MAX_ITEM_QTY, KIOSK_CART_IDLE_MS, EXIT_HOLD_MS, MAX_PIN_ATTEMPTS, PIN_LOCKOUT_SECS, DELIVERY_LOCATIONS } from "../../styles/tokens";
 import { useIdleTimer } from "../../hooks/useIdleTimer";
+import { useOnlineStatus } from "../../hooks/useOnlineStatus";
 import { useMenu, useUsers, useCategories, createDbOps } from "../../hooks/useFirestore";
 import { Img } from "../../components/Img";
 import { KioskBtn, KQtyBtn, ModeLoadingScreen } from "../../components/ui";
 import { isOrderingOpen, getDeliveryDate, fmtDate } from "../../utils";
-import { addDoc, updateDoc, doc, collection } from "firebase/firestore";
+import { addDoc, updateDoc, doc, collection, getDocs, query as fsQuery, orderBy, limit } from "firebase/firestore";
 import { db, CF_BASE } from "../../config/firebase";
 
 function CutoffBanner() {
@@ -46,10 +47,12 @@ function KioskCard({ item, idx, hov, onHover, onClick }) {
   );
 }
 
-function SuccessScreen({ order, onReset }) {
-  const [countdown, setCountdown] = useState(30);
+function SuccessScreen({ order, onReset, onViewHistory }) {
+  const TIMER=45;
+  const [countdown, setCountdown] = useState(TIMER);
   useEffect(()=>{ const iv=setInterval(()=>setCountdown(c=>{if(c<=1){onReset();return 0;}return c-1;}),1000); return()=>clearInterval(iv); },[]);
-  const pct = (countdown/30)*100;
+  const pct = (countdown/TIMER)*100;
+  const delivDate=getDeliveryDate();
   return (
     <div className="kiosk-root" style={{minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 20px",textAlign:"center",fontFamily:F.body,color:C.cream}}>
       <div style={{width:86,height:86,borderRadius:"50%",background:"rgba(22,101,52,.2)",border:"3px solid "+C.greenText,display:"flex",alignItems:"center",justifyContent:"center",fontSize:42,color:C.greenText,marginBottom:26,boxShadow:"0 0 50px rgba(74,222,128,.12)",animation:"successPop .55s cubic-bezier(.175,.885,.32,1.275) forwards"}}>{"\u2713"}</div>
@@ -57,14 +60,20 @@ function SuccessScreen({ order, onReset }) {
       <div style={{fontSize:15,color:C.muted,marginBottom:4,fontFamily:F.display}}>Your order has been placed.</div>
       <div style={{fontFamily:F.display,fontSize:17,color:C.muted,letterSpacing:4,marginBottom:4,fontWeight:500}}>ORDER #{order.orderNumber||order.displayId}</div>
       <div style={{fontSize:14,color:C.mutedLight,marginBottom:4}}>Placed by <strong style={{color:C.cream}}>{order.user}</strong></div>
-      <div style={{fontFamily:F.display,fontSize:34,fontWeight:700,color:C.red,marginBottom:24}}>${order.total.toFixed(2)}</div>
-      <div style={{...GLASS_MODAL,borderRadius:18,padding:"16px 22px",marginBottom:24,minWidth:280,maxWidth:440,width:"100%",textAlign:"left"}}>
+      {order.deliveryLocation&&<div style={{fontSize:13,color:C.muted,marginBottom:2}}>Delivery: <strong style={{color:C.cream}}>{order.deliveryLocation}</strong></div>}
+      {delivDate&&<div style={{fontSize:13,color:C.muted,marginBottom:4}}>Delivery date: <strong style={{color:C.cream}}>{fmtDate(delivDate)}</strong></div>}
+      <div style={{fontFamily:F.display,fontSize:34,fontWeight:700,color:C.red,marginBottom:20}}>${order.total.toFixed(2)}</div>
+      <div style={{...GLASS_MODAL,borderRadius:18,padding:"16px 22px",marginBottom:16,minWidth:280,maxWidth:440,width:"100%",textAlign:"left"}}>
         {order.items.map((item,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid "+C.border,fontSize:14,color:C.muted}}><span>{item.name} {"\u00D7"} {item.quantity}</span><span style={{color:C.cream}}>${(item.price*item.quantity).toFixed(2)}</span></div>)}
         <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 0",fontSize:16,fontWeight:700,color:C.cream}}><span>Total</span><span style={{color:C.red,fontFamily:F.display,fontSize:20}}>${order.total.toFixed(2)}</span></div>
       </div>
-      <div style={{fontSize:15,color:C.muted,marginBottom:22}}>Please see the counter to pick up your order.</div>
-      <KioskBtn primary large onClick={onReset}>Place Another Order</KioskBtn>
-      <div style={{marginTop:20,display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
+      {order.email&&<div style={{fontSize:12,color:C.muted,marginBottom:6}}>A QuickBooks invoice will be emailed to <strong>{order.email}</strong></div>}
+      <div style={{fontSize:12,color:C.border,marginBottom:18}}>Screenshot this page for your records</div>
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center",marginBottom:8}}>
+        <KioskBtn primary large onClick={onReset}>Place Another Order</KioskBtn>
+        {onViewHistory&&<KioskBtn large onClick={onViewHistory}>My Orders</KioskBtn>}
+      </div>
+      <div style={{marginTop:14,display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
         <div style={{width:180,height:5,background:C.border,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",background:C.red,width:pct+"%",transition:"width 1s linear",borderRadius:3}}/></div>
         <div style={{fontSize:13,color:C.border}}>Auto-reset in <span style={{color:C.muted,fontWeight:600}}>{countdown}s</span></div>
       </div>
@@ -72,6 +81,73 @@ function SuccessScreen({ order, onReset }) {
   );
 }
 
+function MyOrdersScreen({ userId, menu, onReorder, onBack }) {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!userId) { setLoading(false); return; }
+    const ref = collection(db, "kioskUsers", userId, "completedOrders");
+    const q = fsQuery(ref, orderBy("completedAt", "desc"), limit(20));
+    getDocs(q).then(snap => {
+      setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }).catch(e => console.error("Failed to load order history:", e))
+      .finally(() => setLoading(false));
+  }, [userId]);
+
+  function handleReorder(pastOrder) {
+    const reorderItems = [];
+    let dropped = 0;
+    for (const item of pastOrder.items || []) {
+      const menuItem = menu.find(m => m.id === item.id) || menu.find(m => m.name === item.name);
+      if (!menuItem || menuItem.showOnKiosk === false || !menuItem.inStock) { dropped++; continue; }
+      const maxQty = menuItem.stock != null ? Math.min(item.quantity, menuItem.stock) : item.quantity;
+      if (maxQty <= 0) { dropped++; continue; }
+      reorderItems.push({ ...menuItem, quantity: maxQty });
+    }
+    onReorder(reorderItems, dropped);
+  }
+
+  if (loading) return <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",color:C.muted,fontFamily:F.body}}>Loading orders...</div>;
+
+  return (
+    <div className="kiosk-root" style={{minHeight:"100vh",background:C.bg,fontFamily:F.body,color:C.cream,padding:"24px 20px"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:24}}>
+        <div style={{fontFamily:F.brand,fontSize:24,fontWeight:900,letterSpacing:1}}>My Orders</div>
+        <KioskBtn onClick={onBack}>Back</KioskBtn>
+      </div>
+      {orders.length === 0 ? (
+        <div style={{textAlign:"center",padding:"60px 0",color:C.muted}}>
+          <div style={{fontSize:42,marginBottom:16,opacity:.4}}>📦</div>
+          <div style={{fontSize:18,fontFamily:F.display}}>No past orders yet</div>
+        </div>
+      ) : (
+        <div style={{display:"flex",flexDirection:"column",gap:12,maxWidth:500,margin:"0 auto"}}>
+          {orders.map(o => (
+            <div key={o.id} style={{...GLASS_MODAL,borderRadius:16,padding:"16px 20px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <div>
+                  <div style={{fontFamily:F.display,fontSize:15,fontWeight:700,color:C.cream}}>Order #{o.orderNumber || "—"}</div>
+                  <div style={{fontSize:12,color:C.muted}}>{o.completedAt ? new Date(o.completedAt).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }) : ""}</div>
+                </div>
+                <div style={{fontFamily:F.display,fontSize:18,fontWeight:700,color:C.red}}>${(o.total || 0).toFixed(2)}</div>
+              </div>
+              <div style={{marginBottom:12}}>
+                {(o.items || []).map((item, i) => (
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:13,color:C.muted,padding:"3px 0"}}>
+                    <span>{item.name} {"\u00D7"} {item.quantity}</span>
+                    <span>${((item.price || 0) * (item.quantity || 1)).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+              <KioskBtn primary onClick={() => handleReorder(o)}>Reorder</KioskBtn>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
   const [cart,setCart]=useState([]);
@@ -113,9 +189,11 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
   const [justAdded,setJustAdded]=useState(false);
   const [hideOOS,setHideOOS]=useState(false);
   const [showDeliveryConfirm,setShowDeliveryConfirm]=useState(false);
+  const [loggedInUser,setLoggedInUser]=useState(null);
   const exitHoldRef=useRef(null);
   const [exitProgress,setExitProgress]=useState(0);
 
+  const online=useOnlineStatus();
   const cats=["All",...categories];
   const filtered=(activeCat==="All"?menu:menu.filter(i=>i.category===activeCat)).filter(i=>i.showOnKiosk!==false).filter(i=>!hideOOS||i.inStock).sort((a,b)=>(a.menuOrder??999)-(b.menuOrder??999));
   const cartQty=cart.reduce((s,i)=>s+i.quantity,0);
@@ -134,23 +212,6 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
     setTimeout(()=>{setJustAdded(false);setSelected(null);},650);
   }
 
-  async function decrementStock(cartItems){
-    for(const cartItem of cartItems){
-      if(cartItem.isBundle&&cartItem.bundleItems&&cartItem.bundleItems.length>0){
-        for(const bi of cartItem.bundleItems){
-          const component=menu.find(m=>m.id===bi.itemId);
-          if(!component||component.stock===null||component.stock===undefined)continue;
-          const newStock=Math.max(0,component.stock-(bi.quantity*cartItem.quantity));
-          try{await dbOps.updateMenuItem(bi.itemId,{stock:newStock,inStock:newStock>0});}catch(e){console.error("Stock decrement failed:",e);}
-        }
-      }
-      if(cartItem.stock!==null&&cartItem.stock!==undefined){
-        const newStock=Math.max(0,cartItem.stock-cartItem.quantity);
-        try{await dbOps.updateMenuItem(cartItem.id,{stock:newStock,inStock:newStock>0});}catch(e){console.error("Stock decrement failed:",e);}
-      }
-    }
-  }
-
   async function handleLogin(){
     if(authLoading)return;
     if(!authEmail.trim()||!authPass){setAuthErr("Enter your email and password.");return;}
@@ -158,9 +219,9 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
     try{
       const res=await fetch(`${CF_BASE}/kioskVerifyPassword`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:authEmail.trim(),password:authPass})});
       const data=await res.json();
-      if(data.success){placeOrder(data.user);}
+      if(data.success){await placeOrder(data.user);}
       else{setAuthErr(data.error==="Invalid credentials"?"Invalid email or password.":"Login failed. Try again.");setShaking(true);setTimeout(()=>setShaking(false),700);}
-    }catch(e){console.error("Login error:",e);setAuthErr("Login failed. Try again.");}
+    }catch(e){console.error("Login error:",e);setAuthErr(e instanceof TypeError?"No internet connection. Please try again.":"Something went wrong. Please try again.");setShaking(true);setTimeout(()=>setShaking(false),700);}
     finally{setAuthLoading(false);}
   }
 
@@ -168,7 +229,7 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
     if(regLoading)return;
     if(!regFirst.trim()||!regLast.trim()){setRegErr("First and last name required.");return;}
     if(!regEmail.trim()||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim())){setRegErr("Valid email required.");return;}
-    if(regPass.length<4){setRegErr("Password must be at least 4 characters.");return;}
+    if(regPass.length<8){setRegErr("Password must be at least 8 characters.");return;}
     if(!regPhone.trim()){setRegErr("Phone number required.");return;}
     const duplicate=users.find(u=>u.email&&u.email.toLowerCase()===regEmail.trim().toLowerCase());
     if(duplicate){setRegErr("An account with this email already exists. Please log in.");return;}
@@ -176,24 +237,29 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
     try{
       // Hash password server-side with bcrypt
       const hashRes=await fetch(`${CF_BASE}/kioskHashPassword`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:regPass})});
+      if(!hashRes.ok){const errData=await hashRes.json().catch(()=>({}));throw new Error(errData.error||"Unable to create account. Please try again.");}
       const hashData=await hashRes.json();
       if(!hashData.hash)throw new Error("Hash failed");
       const newUser={firstName:regFirst.trim(),lastName:regLast.trim(),email:regEmail.trim().toLowerCase(),phone:regPhone.replace(/\D/g,""),passwordHash:hashData.hash,role:"Customer",deliveryLocation:regLocation};
       const docRef=await addDoc(collection(db,"kioskUsers"),newUser);
-      placeOrder({id:docRef.id,...newUser});
+      await placeOrder({id:docRef.id,...newUser});
     }catch(e){
-      console.error(e);setRegErr("Registration failed. Try again.");
+      console.error(e);setRegErr(e instanceof TypeError?"No internet connection. Please try again.":"Registration failed. Please try again.");
     }finally{setRegLoading(false);}
   }
 
-  function placeOrder(user){
+  async function placeOrder(user){
     const userName=(user.firstName||"")+" "+(user.lastName||"");
-    const orderNum=Math.floor(Math.random()*9000+1000);
-    const orderData={orderNumber:orderNum,user:userName.trim()||user.name||"Customer",userId:user.id,email:user.email||"",deliveryLocation:user.deliveryLocation||"",items:cart.map(i=>({id:i.id,name:i.name,price:i.price,quantity:i.quantity,image:i.image||"",sku:i.sku||"",barcode:i.barcode||"",barcodeImage:i.barcodeImage||"",qbItemId:i.qbItemId||""})),total:cartTotal,ts:new Date().toISOString()};
-    setOrderResult({...orderData,displayId:orderNum,email:user.email||""});
-    setView("success");
-    addOrder(orderData).catch(e=>console.error("Order save failed:",e));
-    decrementStock(cart);
+    const orderData={user:userName.trim()||user.name||"Customer",userId:user.id,email:user.email||"",deliveryLocation:user.deliveryLocation||"",items:cart.map(i=>({id:i.id,name:i.name,price:i.price,quantity:i.quantity,image:i.image||"",sku:i.sku||"",barcode:i.barcode||"",barcodeImage:i.barcodeImage||"",qbItemId:i.qbItemId||""})),total:cartTotal,ts:new Date().toISOString()};
+    try{
+      const barcode=await addOrder(orderData);
+      setOrderResult({...orderData,orderNumber:barcode,displayId:barcode,email:user.email||""});
+      setLoggedInUser(user);
+      setView("success");
+    }catch(e){
+      console.error("Order failed:",e);
+      setAuthErr("Failed to place order. Please try again.");
+    }
   }
 
   function handleResetVerify(){
@@ -210,10 +276,11 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
 
   async function handleResetPassword(){
     if(resetLoading)return;
-    if(resetNewPass.length<4){setResetErr("Password must be at least 4 characters.");return;}
+    if(resetNewPass.length<8){setResetErr("Password must be at least 8 characters.");return;}
     setResetLoading(true);setResetErr("");
     try{
       const hashRes=await fetch(`${CF_BASE}/kioskHashPassword`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:resetNewPass})});
+      if(!hashRes.ok){const errData=await hashRes.json().catch(()=>({}));throw new Error(errData.error||"Unable to reset password. Please try again.");}
       const hashData=await hashRes.json();
       if(!hashData.hash)throw new Error("Hash failed");
       await updateDoc(doc(db,"kioskUsers",resetUserId),{passwordHash:hashData.hash});
@@ -225,12 +292,12 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
       setAuthErr("Password updated! Sign in with your new password.");
     }catch(e){
       console.error(e);
-      setResetErr("Failed to update password. Try again.");
+      setResetErr(e instanceof TypeError?"No internet connection. Please try again.":"Failed to update password. Please try again.");
     }finally{setResetLoading(false);}
   }
 
   function resetAuth(){setAuthMode("choose");setAuthEmail("");setAuthPass("");setAuthErr("");setRegFirst("");setRegLast("");setRegPhone("");setRegEmail("");setRegPass("");setRegLocation(DELIVERY_LOCATIONS[0]);setRegErr("");setResetEmail("");setResetPhone("");setResetNewPass("");setResetStep(1);setResetErr("");setResetUserId(null);setShowLoginPass(false);setShowRegPass(false);setShowResetPass(false);}
-  function reset(){setCart([]);resetAuth();setOrderResult(null);setView("idle");setActiveCat("All");setSelected(null);}
+  function reset(){setCart([]);resetAuth();setOrderResult(null);setLoggedInUser(null);setView("idle");setActiveCat("All");setSelected(null);}
 
   if(view==="idle")return(
     <div className="kiosk-root" onClick={()=>setView("menu")} style={{minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative",overflow:"hidden",padding:"0 20px"}}>
@@ -246,7 +313,8 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
     </div>
   );
 
-  if(view==="success"&&orderResult)return <SuccessScreen order={orderResult} onReset={reset}/>;
+  if(view==="success"&&orderResult)return <SuccessScreen order={orderResult} onReset={reset} onViewHistory={loggedInUser?()=>setView("history"):null}/>;
+  if(view==="history"&&loggedInUser)return <MyOrdersScreen userId={loggedInUser.id} menu={menu} onBack={()=>setView(orderResult?"success":"menu")} onReorder={(items,dropped)=>{setCart(items);if(dropped>0)setAuthErr(dropped+" item(s) no longer available");setView("cart");}}/>;
 
   return(
     <div className="kiosk-root" style={{minHeight:"100vh",background:C.bg,fontFamily:F.body,color:C.cream,display:"flex",flexDirection:"column"}}>
@@ -260,6 +328,7 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
         </div>
       </header>
       <CutoffBanner/>
+      {!online&&<div style={{background:"#450a0a",color:"#f87171",textAlign:"center",padding:"10px 16px",fontFamily:F.display,fontSize:14,fontWeight:700,letterSpacing:1}}>You're offline — orders can't be placed right now</div>}
 
       {view==="menu"&&(
         <div style={{flex:1,padding:"clamp(14px, 3vw, 20px) clamp(14px, 3vw, 24px)",animation:"fadeUp .3s ease"}}>
@@ -397,11 +466,11 @@ function KioskApp({ menu, users, categories, addOrder, dbOps, onExit }) {
                 {resetStep===2&&<>
                   <div style={{background:"rgba(22,101,52,.15)",border:"1px solid rgba(74,222,128,.2)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:C.greenText,textAlign:"center"}}>{"\u2713"} Identity verified. Enter your new password below.</div>
                   <div style={{marginBottom:14,position:"relative"}}>
-                    <input type={showResetPass?"text":"password"} value={resetNewPass} onChange={e=>{setResetNewPass(e.target.value);setResetErr("");}} placeholder="New password (min 4 characters)" style={{width:"100%",background:C.card,border:"1px solid "+C.borderMid,borderRadius:10,padding:"12px 44px 12px 14px",color:C.cream,fontFamily:F.body,fontSize:15}}/>
+                    <input type={showResetPass?"text":"password"} value={resetNewPass} onChange={e=>{setResetNewPass(e.target.value);setResetErr("");}} placeholder="New password (min 8 characters)" style={{width:"100%",background:C.card,border:"1px solid "+C.borderMid,borderRadius:10,padding:"12px 44px 12px 14px",color:C.cream,fontFamily:F.body,fontSize:15}}/>
                     <button onClick={()=>setShowResetPass(p=>!p)} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",color:C.muted,cursor:"pointer",fontSize:18,lineHeight:1,padding:"4px"}}>{showResetPass?"\u{1F648}":"\u{1F441}"}</button>
                   </div>
                   {resetErr&&<div style={{background:C.errorBg,color:C.errorText,borderRadius:8,padding:"9px 14px",fontSize:13,marginBottom:12}}>{resetErr}</div>}
-                  <button onClick={handleResetPassword} disabled={resetLoading} className="touch-active" style={{width:"100%",background:resetNewPass.length>=4?C.green:C.border,border:"none",color:C.cream,borderRadius:12,padding:"14px",fontSize:16,fontWeight:700,cursor:resetNewPass.length>=4?"pointer":"default",fontFamily:F.display,letterSpacing:1,opacity:resetNewPass.length>=4?1:.5,transition:"all .2s",minHeight:52}}>{resetLoading?"Updating...":"Set New Password"}</button>
+                  <button onClick={handleResetPassword} disabled={resetLoading} className="touch-active" style={{width:"100%",background:resetNewPass.length>=8?C.green:C.border,border:"none",color:C.cream,borderRadius:12,padding:"14px",fontSize:16,fontWeight:700,cursor:resetNewPass.length>=8?"pointer":"default",fontFamily:F.display,letterSpacing:1,opacity:resetNewPass.length>=8?1:.5,transition:"all .2s",minHeight:52}}>{resetLoading?"Updating...":"Set New Password"}</button>
                 </>}
 
                 <div style={{marginTop:14,textAlign:"center"}}>
