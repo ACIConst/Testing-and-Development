@@ -87,7 +87,7 @@ function AdminApp({ menu, users, orders, adminAccounts, categories, catNames, db
   },[fontId]);
 
   // Derive admin identity from Firebase Auth user + kioskUsers role
-  const ADMIN_ROLES = ["Super Admin", "manager", "super_admin"];
+  const ADMIN_ROLES = ["Super Admin", "Manager", "Admin", "manager", "super_admin"];
   const kioskUser = users.find(u => u.email && u.email.toLowerCase() === user?.email?.toLowerCase());
   const loggedInAdmin = kioskUser && ADMIN_ROLES.includes(kioskUser.role)
     ? { id: kioskUser.id, name: ((kioskUser.firstName || "") + " " + (kioskUser.lastName || "")).trim() || user.email, role: kioskUser.role === "super_admin" ? "Super Admin" : kioskUser.role }

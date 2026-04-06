@@ -3,7 +3,7 @@ const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
 
 const BCRYPT_ROUNDS = 12;
-const ADMIN_ROLES = ["Super Admin", "manager", "super_admin"];
+const ADMIN_ROLES = ["Super Admin", "Manager", "Admin", "manager", "super_admin"];
 const VALID_STAFF_ROLES = ["Employee", "Manager", "Admin", "Super Admin"];
 const MAX_STAFF_OPS_PER_IP = 10;
 
@@ -147,7 +147,21 @@ async function verifyCallerIsAdmin(req) {
   const token = authHeader.split("Bearer ")[1];
   const decoded = await getAuth().verifyIdToken(token);
   const db = getFirestore();
-  const userDoc = await db.collection("kioskUsers").doc(decoded.uid).get();
+
+  // Try lookup by Auth UID first (new accounts created via createStaff)
+  let userDoc = await db.collection("kioskUsers").doc(decoded.uid).get();
+
+  // Fall back to email query (legacy accounts with auto-generated doc IDs)
+  if (!userDoc.exists && decoded.email) {
+    const snap = await db.collection("kioskUsers")
+      .where("email", "==", decoded.email.toLowerCase().trim())
+      .limit(1)
+      .get();
+    if (!snap.empty) {
+      userDoc = snap.docs[0];
+    }
+  }
+
   if (!userDoc.exists) {
     throw { status: 403, message: "No admin profile found" };
   }
