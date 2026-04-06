@@ -20,7 +20,7 @@ export default defineConfig({
           {
             urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
             handler: 'CacheFirst',
-            options: { cacheName: 'google-fonts-webfonts', expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 } }
+            options: { cacheName: 'google-fonts-webfonts', cacheableResponse: { statuses: [0, 200] }, expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 } }
           },
           {
             urlPattern: /^https:\/\/.*\.firebasestorage\.app\/.*/i,
